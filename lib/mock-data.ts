@@ -10,6 +10,7 @@ export interface TestRun {
   failed: number
   flaky: number
   duration: string
+  hasScreenshots?: boolean
 }
 
 export const mockTestRuns: TestRun[] = [
@@ -25,6 +26,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 0,
     flaky: 0,
     duration: "12m 34s",
+    hasScreenshots: true,
   },
   {
     id: "2",
@@ -38,6 +40,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 2,
     flaky: 1,
     duration: "9m 12s",
+    hasScreenshots: false,
   },
   {
     id: "3",
@@ -51,6 +54,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 3,
     flaky: 0,
     duration: "13m 01s",
+    hasScreenshots: true,
   },
   {
     id: "4",
@@ -64,6 +68,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 4,
     flaky: 2,
     duration: "7m 45s",
+    hasScreenshots: false,
   },
   {
     id: "5",
@@ -77,6 +82,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 5,
     flaky: 2,
     duration: "11m 22s",
+    hasScreenshots: true,
   },
   {
     id: "6",
@@ -90,6 +96,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 0,
     flaky: 0,
     duration: "12m 18s",
+    hasScreenshots: false,
   },
   {
     id: "7",
@@ -103,6 +110,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 6,
     flaky: 1,
     duration: "8m 56s",
+    hasScreenshots: true,
   },
   {
     id: "8",
@@ -116,6 +124,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 4,
     flaky: 1,
     duration: "12m 45s",
+    hasScreenshots: false,
   },
   {
     id: "9",
@@ -129,6 +138,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 5,
     flaky: 1,
     duration: "6m 30s",
+    hasScreenshots: true,
   },
   {
     id: "10",
@@ -142,5 +152,6 @@ export const mockTestRuns: TestRun[] = [
     failed: 2,
     flaky: 0,
     duration: "12m 55s",
+    hasScreenshots: false,
   },
 ]

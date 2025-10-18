@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Upload, CheckCircle2, XCircle } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function UploadDialog() {
   const [open, setOpen] = useState(false)
@@ -27,6 +28,7 @@ export function UploadDialog() {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [uploadType, setUploadType] = useState<"json" | "zip">("zip")
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -45,48 +47,78 @@ export function UploadDialog() {
     setResult(null)
 
     try {
-      const fileContent = await file.text()
-      const results = JSON.parse(fileContent)
+      if (uploadType === "json") {
+        const fileContent = await file.text()
+        const results = JSON.parse(fileContent)
 
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          environment,
-          trigger,
-          branch,
-          commit,
-          results,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setResult({
-          success: true,
-          message: `Successfully uploaded ${data.testRun.total} tests (${data.testRun.passed} passed, ${data.testRun.failed} failed)`,
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            environment,
+            trigger,
+            branch,
+            commit,
+            results,
+          }),
         })
-        // Reset form
-        setTimeout(() => {
-          setOpen(false)
-          setEnvironment("")
-          setTrigger("")
-          setBranch("")
-          setCommit("")
-          setFile(null)
-          setResult(null)
-        }, 2000)
+
+        const data = await response.json()
+
+        if (response.ok) {
+          setResult({
+            success: true,
+            message: `Successfully uploaded ${data.testRun.total} tests (${data.testRun.passed} passed, ${data.testRun.failed} failed)`,
+          })
+          resetForm()
+        } else {
+          setResult({ success: false, message: data.error || "Upload failed" })
+        }
       } else {
-        setResult({ success: false, message: data.error || "Upload failed" })
+        // Handle ZIP file upload
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("environment", environment)
+        formData.append("trigger", trigger)
+        formData.append("branch", branch)
+        formData.append("commit", commit || "")
+
+        const response = await fetch("/api/upload-zip", {
+          method: "POST",
+          body: formData,
+        })
+
+        const data = await response.json()
+
+        if (response.ok) {
+          setResult({
+            success: true,
+            message: `Successfully uploaded ${data.testRun.total} tests (${data.testRun.passed} passed, ${data.testRun.failed} failed)`,
+          })
+          resetForm()
+        } else {
+          setResult({ success: false, message: data.error || "Upload failed" })
+        }
       }
     } catch (error) {
       setResult({ success: false, message: "Failed to parse or upload test results" })
     } finally {
       setUploading(false)
     }
+  }
+
+  const resetForm = () => {
+    setTimeout(() => {
+      setOpen(false)
+      setEnvironment("")
+      setTrigger("")
+      setBranch("")
+      setCommit("")
+      setFile(null)
+      setResult(null)
+    }, 2000)
   }
 
   return (
@@ -100,9 +132,7 @@ export function UploadDialog() {
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Upload Test Results</DialogTitle>
-          <DialogDescription>
-            Upload your Playwright test results JSON file to track trends over time.
-          </DialogDescription>
+          <DialogDescription>Upload your Playwright test results to track trends over time.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -157,13 +187,30 @@ export function UploadDialog() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="file">
-              Test Results JSON <span className="text-destructive">*</span>
-            </Label>
-            <Input id="file" type="file" accept=".json" onChange={handleFileChange} />
-            {file && <p className="text-sm text-muted-foreground">{file.name}</p>}
-          </div>
+          <Tabs value={uploadType} onValueChange={(v) => setUploadType(v as "json" | "zip")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="zip">HTML Report (ZIP)</TabsTrigger>
+              <TabsTrigger value="json">JSON Report</TabsTrigger>
+            </TabsList>
+            <TabsContent value="zip" className="space-y-2">
+              <Label htmlFor="file-zip">
+                HTML Report ZIP <span className="text-destructive">*</span>
+              </Label>
+              <Input id="file-zip" type="file" accept=".zip" onChange={handleFileChange} />
+              {file && <p className="text-sm text-muted-foreground">{file.name}</p>}
+              <p className="text-xs text-muted-foreground">
+                Upload the HTML report ZIP file from GitHub Actions (includes screenshots)
+              </p>
+            </TabsContent>
+            <TabsContent value="json" className="space-y-2">
+              <Label htmlFor="file-json">
+                Test Results JSON <span className="text-destructive">*</span>
+              </Label>
+              <Input id="file-json" type="file" accept=".json" onChange={handleFileChange} />
+              {file && <p className="text-sm text-muted-foreground">{file.name}</p>}
+              <p className="text-xs text-muted-foreground">Upload JSON report (screenshots not included)</p>
+            </TabsContent>
+          </Tabs>
 
           {result && (
             <div
@@ -186,14 +233,29 @@ export function UploadDialog() {
           </Button>
         </div>
 
-        <div className="mt-4 rounded-lg bg-muted p-4 text-sm">
-          <p className="font-medium mb-2">How to generate test results:</p>
-          <Textarea
-            readOnly
-            value={`npx playwright test --reporter=json > results.json`}
-            className="font-mono text-xs bg-background"
-            rows={1}
-          />
+        <div className="mt-4 rounded-lg bg-muted p-4 text-sm space-y-2">
+          <p className="font-medium">How to generate test results:</p>
+          <div className="space-y-2">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">JSON Report:</p>
+              <Textarea
+                readOnly
+                value={`npx playwright test --reporter=json > results.json`}
+                className="font-mono text-xs bg-background"
+                rows={1}
+              />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">HTML Report (with screenshots):</p>
+              <Textarea
+                readOnly
+                value={`npx playwright test --reporter=html
+# Then download the playwright-report folder as a ZIP`}
+                className="font-mono text-xs bg-background"
+                rows={2}
+              />
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

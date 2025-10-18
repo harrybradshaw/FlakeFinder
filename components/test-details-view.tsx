@@ -4,9 +4,21 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertTriangle, FileText } from "lucide-react"
+import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertTriangle, FileText, ImageIcon } from "lucide-react"
 import Link from "next/link"
 import type { TestRun } from "@/lib/mock-data"
+import Image from "next/image"
+
+interface TestCase {
+  name: string
+  file: string
+  status: "passed" | "failed" | "flaky"
+  duration: string
+  browser?: string
+  error?: string
+  retries?: number
+  screenshots?: Array<{ name: string; url: string }>
+}
 
 interface TestDetailsViewProps {
   testRun: TestRun
@@ -111,6 +123,12 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                       <div className="text-sm text-muted-foreground">{testCase.file}</div>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      {testCase.screenshots && testCase.screenshots.length > 0 && (
+                        <span className="flex items-center gap-1">
+                          <ImageIcon className="h-3 w-3" />
+                          {testCase.screenshots.length}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {testCase.duration}
@@ -126,6 +144,27 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                         <pre className="text-xs text-red-400 overflow-x-auto whitespace-pre-wrap font-mono">
                           {testCase.error}
                         </pre>
+                      </div>
+                    )}
+
+                    {testCase.screenshots && testCase.screenshots.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Screenshots</p>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {testCase.screenshots.map((screenshot, idx) => (
+                            <div key={idx} className="space-y-2">
+                              <div className="relative aspect-video rounded-lg border border-border overflow-hidden bg-muted">
+                                <Image
+                                  src={screenshot.url || "/placeholder.svg"}
+                                  alt={screenshot.name}
+                                  fill
+                                  className="object-contain"
+                                />
+                              </div>
+                              <p className="text-xs text-muted-foreground">{screenshot.name}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -166,8 +205,8 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
 }
 
 // Helper function to generate mock test cases based on test run stats
-function generateMockTestCases(testRun: TestRun) {
-  const testCases = []
+function generateMockTestCases(testRun: TestRun): TestCase[] {
+  const testCases: TestCase[] = []
   const testFiles = [
     "tests/auth/login.spec.ts",
     "tests/auth/signup.spec.ts",
@@ -203,6 +242,16 @@ function generateMockTestCases(testRun: TestRun) {
       duration: `${Math.floor(Math.random() * 3000) + 1000}ms`,
       browser: browsers[i % browsers.length],
       error: `Error: Expected element to be visible\n    at tests/${testFiles[(i + 3) % testFiles.length]}:${Math.floor(Math.random() * 50) + 10}:${Math.floor(Math.random() * 20) + 5}\n\nExpected: visible\nReceived: hidden`,
+      screenshots: [
+        {
+          name: "test-failed-1.png",
+          url: "/failed-test-screenshot-showing-error-state.jpg",
+        },
+        {
+          name: "test-failed-2.png",
+          url: "/browser-console-with-error-messages.jpg",
+        },
+      ],
     })
   }
 

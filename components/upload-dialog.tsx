@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { useSWRConfig } from "swr"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -20,6 +21,7 @@ import { Upload, CheckCircle2, XCircle } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function UploadDialog() {
+  const { mutate } = useSWRConfig()
   const [open, setOpen] = useState(false)
   const [environment, setEnvironment] = useState("")
   const [trigger, setTrigger] = useState("")
@@ -72,6 +74,8 @@ export function UploadDialog() {
             success: true,
             message: `Successfully uploaded ${data.testRun.total} tests (${data.testRun.passed} passed, ${data.testRun.failed} failed)`,
           })
+          // Revalidate all test-runs queries
+          mutate((key) => typeof key === "string" && key.startsWith("/api/test-runs"))
           resetForm()
         } else {
           setResult({ success: false, message: data.error || "Upload failed" })
@@ -97,6 +101,8 @@ export function UploadDialog() {
             success: true,
             message: `Successfully uploaded ${data.testRun.total} tests (${data.testRun.passed} passed, ${data.testRun.failed} failed)`,
           })
+          // Revalidate all test-runs queries
+          mutate((key) => typeof key === "string" && key.startsWith("/api/test-runs"))
           resetForm()
         } else {
           setResult({ success: false, message: data.error || "Upload failed" })

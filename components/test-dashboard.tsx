@@ -1,30 +1,56 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
+import useSWR from "swr"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { TestRunsList } from "@/components/test-runs-list"
 import { TrendsChart } from "@/components/trends-chart"
 import { TestStats } from "@/components/test-stats"
 import { UploadDialog } from "@/components/upload-dialog"
-import { mockTestRuns } from "@/lib/mock-data"
+import type { TestRun } from "@/lib/mock-data"
+
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch: ${response.statusText}`)
+  }
+  const data = await response.json()
+  return data.runs || []
+}
 
 export function TestDashboard() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>("all")
   const [selectedTrigger, setSelectedTrigger] = useState<string>("all")
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("7d")
 
-  const filteredRuns = mockTestRuns.filter((run) => {
-    const envMatch = selectedEnvironment === "all" || run.environment === selectedEnvironment
-    const triggerMatch = selectedTrigger === "all" || run.trigger === selectedTrigger
-    return envMatch && triggerMatch
+  // Build API URL with query parameters
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      timeRange: selectedTimeRange,
+    })
+
+    if (selectedEnvironment !== "all") {
+      params.append("environment", selectedEnvironment)
+    }
+    if (selectedTrigger !== "all") {
+      params.append("trigger", selectedTrigger)
+    }
+
+    return `/api/test-runs?${params.toString()}`
+  }, [selectedEnvironment, selectedTrigger, selectedTimeRange])
+
+  // Fetch data with SWR
+  const { data: testRuns, error, isLoading } = useSWR<TestRun[]>(apiUrl, fetcher, {
+    refreshInterval: 30000, // Auto-refresh every 30 seconds
+    revalidateOnFocus: true,
   })
 
   const stats = {
-    totalTests: filteredRuns.reduce((acc, run) => acc + run.total, 0),
-    passed: filteredRuns.reduce((acc, run) => acc + run.passed, 0),
-    failed: filteredRuns.reduce((acc, run) => acc + run.failed, 0),
-    flaky: filteredRuns.reduce((acc, run) => acc + run.flaky, 0),
+    totalTests: testRuns?.reduce((acc, run) => acc + run.total, 0) || 0,
+    passed: testRuns?.reduce((acc, run) => acc + run.passed, 0) || 0,
+    failed: testRuns?.reduce((acc, run) => acc + run.failed, 0) || 0,
+    flaky: testRuns?.reduce((acc, run) => acc + run.flaky, 0) || 0,
   }
 
   return (
@@ -90,11 +116,31 @@ export function TestDashboard() {
           </TabsList>
 
           <TabsContent value="runs" className="mt-6">
-            <TestRunsList runs={filteredRuns} />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-muted-foreground">Loading test runs...</p>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-destructive">Error: {error.message}</p>
+              </div>
+            ) : (
+              <TestRunsList runs={testRuns || []} />
+            )}
           </TabsContent>
 
           <TabsContent value="trends" className="mt-6">
-            <TrendsChart runs={filteredRuns} timeRange={selectedTimeRange} />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-muted-foreground">Loading trends...</p>
+              </div>
+            ) : error ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-destructive">Error: {error.message}</p>
+              </div>
+            ) : (
+              <TrendsChart runs={testRuns || []} timeRange={selectedTimeRange} />
+            )}
           </TabsContent>
         </Tabs>
       </main>

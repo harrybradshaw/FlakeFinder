@@ -9,8 +9,32 @@ export interface TestRun {
   passed: number
   failed: number
   flaky: number
+  skipped?: number
   duration: string
   hasScreenshots?: boolean
+  tests?: Array<{
+    id: string
+    name: string
+    status: "passed" | "failed" | "flaky" | "skipped" | "timedOut"
+    duration: number
+    file: string
+    error?: string
+    screenshots?: string[]
+    retryResults?: Array<{
+      id?: string
+      retry_index?: number
+      retryIndex?: number
+      status: string
+      duration: number
+      error?: string
+      error_stack?: string
+      errorStack?: string
+      screenshots?: string[]
+      attachments?: Array<{name: string, contentType: string, content: string}>
+      started_at?: string
+      startTime?: string
+    }>
+  }>
 }
 
 export const mockTestRuns: TestRun[] = [

@@ -1,10 +1,12 @@
 "use client"
 
+import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertTriangle, FileText, ImageIcon } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertTriangle, FileText, ImageIcon, Filter, ArrowUpDown } from "lucide-react"
 import Link from "next/link"
 import type { TestRun } from "@/lib/mock-data"
 import Image from "next/image"
@@ -12,23 +14,115 @@ import Image from "next/image"
 interface TestCase {
   name: string
   file: string
-  status: "passed" | "failed" | "flaky"
+  status: "passed" | "failed" | "flaky" | "skipped"
   duration: string
   browser?: string
   error?: string
   retries?: number
   screenshots?: Array<{ name: string; url: string }>
+  retryResults?: Array<{
+    retryIndex: number
+    status: string
+    duration: number
+    error?: string
+    errorStack?: string
+    screenshots?: string[]
+    attachments?: Array<{name: string, contentType: string, content: string}>
+    startTime?: string
+  }>
 }
 
 interface TestDetailsViewProps {
   testRun: TestRun
 }
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  const seconds = (ms / 1000).toFixed(2)
+  return `${seconds}s`
+}
+
 export function TestDetailsView({ testRun }: TestDetailsViewProps) {
   const passRate = ((testRun.passed / testRun.total) * 100).toFixed(1)
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [sortBy, setSortBy] = useState<string>("status")
 
-  // Generate mock test cases based on the test run stats
-  const testCases = generateMockTestCases(testRun)
+  // Use real test cases if available, otherwise generate mock ones
+  const allTestCases: TestCase[] = testRun.tests && testRun.tests.length > 0
+    ? testRun.tests.map((test) => {
+        const retries = test.retryResults?.map((retry) => ({
+          retryIndex: retry.retry_index ?? retry.retryIndex ?? 0,
+          status: retry.status,
+          duration: retry.duration,
+          error: retry.error,
+          errorStack: retry.error_stack ?? retry.errorStack,
+          screenshots: retry.screenshots || [],
+          attachments: retry.attachments || [],
+          startTime: retry.started_at || retry.startTime,
+        })) || []
+        
+        // Debug logging
+        if (test.status === "flaky" || test.status === "failed" || retries.length > 0) {
+          console.log(`[TestDetails] Test "${test.name}":`, {
+            status: test.status,
+            retryCount: retries.length,
+            retries: retries,
+            hasError: !!test.error,
+            hasRetryResults: !!test.retryResults,
+          })
+          if (retries.length > 0) {
+            retries.forEach((retry, idx) => {
+              console.log(`  Retry ${idx}:`, {
+                status: retry.status,
+                hasError: !!retry.error,
+                hasErrorStack: !!retry.errorStack,
+                errorPreview: retry.error?.substring(0, 50),
+              })
+            })
+          }
+        }
+        
+        return {
+          name: test.name,
+          file: test.file,
+          status: test.status === "timedOut" ? "failed" : (test.status as "passed" | "failed" | "flaky" | "skipped"),
+          duration: formatDuration(test.duration),
+          error: test.error,
+          screenshots: test.screenshots?.map((url, idx) => ({
+            name: `screenshot-${idx + 1}.png`,
+            url,
+          })),
+          retryResults: retries,
+        }
+      })
+    : generateMockTestCases(testRun)
+
+  // Filter and sort tests
+  const testCases = useMemo(() => {
+    let filtered = allTestCases
+
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((test) => test.status === statusFilter)
+    }
+
+    // Apply sorting
+    const sorted = [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return a.name.localeCompare(b.name)
+        case "duration":
+          return parseFloat(b.duration) - parseFloat(a.duration)
+        case "status":
+          const statusOrder = { failed: 0, flaky: 1, skipped: 2, passed: 3 }
+          return statusOrder[a.status] - statusOrder[b.status]
+        default:
+          return 0
+      }
+    })
+
+    return sorted
+  }, [allTestCases, statusFilter, sortBy])
 
   return (
     <div className="min-h-screen bg-background">
@@ -109,7 +203,39 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
         </div>
 
         <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Test Cases</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold">Test Cases ({testCases.length})</h2>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Tests</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                    <SelectItem value="flaky">Flaky</SelectItem>
+                    <SelectItem value="passed">Passed</SelectItem>
+                    <SelectItem value="skipped">Skipped</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="status">Status</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="duration">Duration</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
           <Accordion type="single" collapsible className="w-full">
             {testCases.map((testCase, index) => (
               <AccordionItem key={index} value={`test-${index}`}>
@@ -118,15 +244,17 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                     {testCase.status === "passed" && <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />}
                     {testCase.status === "failed" && <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}
                     {testCase.status === "flaky" && <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />}
+                    {testCase.status === "skipped" && <Clock className="h-4 w-4 text-gray-500 flex-shrink-0" />}
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate">{testCase.name}</div>
                       <div className="text-sm text-muted-foreground">{testCase.file}</div>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      {testCase.screenshots && testCase.screenshots.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <ImageIcon className="h-3 w-3" />
-                          {testCase.screenshots.length}
+                      {testCase.retryResults && testCase.retryResults.length > 1 && (
+                        <span className="flex items-center gap-1 text-yellow-500">
+                          <Badge variant="outline" className="text-xs border-yellow-500/50 text-yellow-500">
+                            {testCase.retryResults.length} attempts
+                          </Badge>
                         </span>
                       )}
                       <span className="flex items-center gap-1">
@@ -138,40 +266,137 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="pl-7 pt-2 space-y-3">
-                    {testCase.status === "failed" && testCase.error && (
-                      <div className="rounded-lg bg-red-500/10 p-4 border border-red-500/20">
-                        <p className="text-sm font-medium text-red-500 mb-2">Error</p>
-                        <pre className="text-xs text-red-400 overflow-x-auto whitespace-pre-wrap font-mono">
-                          {testCase.error}
+                    {testCase.status === "failed" && testCase.error && !testCase.retryResults && (
+                      <div className="rounded-lg bg-muted p-4 border border-border">
+                        <p className="text-sm font-semibold text-destructive mb-3">Error</p>
+                        <pre className="text-sm text-foreground leading-relaxed whitespace-pre-wrap font-sans overflow-x-auto">
+                          {testCase.error.replace(/\u001b\[\d+m/g, '')}
                         </pre>
                       </div>
                     )}
 
-                    {testCase.screenshots && testCase.screenshots.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Screenshots</p>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          {testCase.screenshots.map((screenshot, idx) => (
-                            <div key={idx} className="space-y-2">
-                              <div className="relative aspect-video rounded-lg border border-border overflow-hidden bg-muted">
-                                <Image
-                                  src={screenshot.url || "/placeholder.svg"}
-                                  alt={screenshot.name}
-                                  fill
-                                  className="object-contain"
-                                />
+                    {(testCase.status === "flaky" || testCase.status === "failed") && testCase.retryResults && testCase.retryResults.length > 0 && (
+                      <div className="space-y-3">
+                        <div className={`rounded-lg p-4 border ${
+                          testCase.status === "flaky" 
+                            ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800" 
+                            : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+                        }`}>
+                          <p className={`text-sm font-semibold mb-2 ${
+                            testCase.status === "flaky" 
+                              ? "text-yellow-800 dark:text-yellow-200" 
+                              : "text-red-800 dark:text-red-200"
+                          }`}>
+                            {testCase.status === "flaky" ? "Flaky Test" : "Failed Test with Retries"}
+                          </p>
+                          <p className={`text-sm mb-4 ${
+                            testCase.status === "flaky" 
+                              ? "text-yellow-700 dark:text-yellow-300" 
+                              : "text-red-700 dark:text-red-300"
+                          }`}>
+                            This test had {testCase.retryResults.length} {testCase.retryResults.length === 1 ? "attempt" : "attempts"}
+                          </p>
+                          
+                          <div className="space-y-3">
+                            {testCase.retryResults.map((retry, retryIdx) => (
+                              <div key={retryIdx} className={`rounded-md bg-background/50 p-3 border ${
+                                testCase.status === "flaky" ? "border-yellow-500/20" : "border-red-500/20"
+                              }`}>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant={retry.status === "passed" ? "default" : "destructive"} className="text-xs">
+                                      Attempt {retry.retryIndex + 1}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      {retry.status === "passed" ? "✓ Passed" : "✗ Failed"}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDuration(retry.duration)}
+                                  </span>
+                                </div>
+                                
+                                {/* Attachments Section */}
+                                {retry.attachments && retry.attachments.length > 0 && (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-semibold text-foreground mb-2">Test Context ({retry.attachments.length}):</p>
+                                    <Accordion type="multiple" className="w-full">
+                                      {retry.attachments.map((att, idx) => (
+                                        <AccordionItem key={idx} value={`attachment-${idx}`} className="border-border">
+                                          <AccordionTrigger className="text-sm py-2 hover:no-underline">
+                                            <span className="font-medium">{att.name}</span>
+                                          </AccordionTrigger>
+                                          <AccordionContent>
+                                            <div className="rounded-md bg-muted p-3 border border-border">
+                                              <pre className="text-sm text-foreground leading-normal whitespace-pre-wrap font-sans overflow-x-auto max-h-96">
+                                                {att.content}
+                                              </pre>
+                                            </div>
+                                          </AccordionContent>
+                                        </AccordionItem>
+                                      ))}
+                                    </Accordion>
+                                  </div>
+                                )}
+                                
+                                {((retry.error || retry.errorStack) && retry.status !== "passed") || (retry.screenshots && retry.screenshots.length > 0) ? (
+                                  <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    {/* Error Details - Left Side */}
+                                    {(retry.error || retry.errorStack) && retry.status !== "passed" && (
+                                      <div>
+                                        <p className="text-xs font-semibold text-foreground mb-2">Error Details:</p>
+                                        <div className="rounded-md bg-muted p-3 border border-border">
+                                          {retry.error && (
+                                            <div>
+                                              <p className="text-xs font-semibold text-destructive mb-1.5">Error Message:</p>
+                                              <pre className="text-sm text-foreground leading-normal whitespace-pre-wrap font-sans overflow-x-auto mb-3">
+                                                {retry.error.replace(/\u001b\[\d+m/g, '')}
+                                              </pre>
+                                            </div>
+                                          )}
+                                          {retry.errorStack && retry.errorStack !== retry.error && (
+                                            <div>
+                                              <p className="text-xs font-semibold text-destructive mb-1.5">Full Stack Trace:</p>
+                                              <pre className="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap font-mono leading-normal bg-background p-2 rounded border border-border">
+                                                {retry.errorStack.replace(/\u001b\[\d+m/g, '')}
+                                              </pre>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    {/* Screenshots - Right Side */}
+                                    {retry.screenshots && retry.screenshots.length > 0 && (
+                                      <div>
+                                        <p className="text-xs font-semibold text-foreground mb-2">Screenshots from this attempt:</p>
+                                        <div className="space-y-2">
+                                          {retry.screenshots.map((url, idx) => (
+                                            <div key={idx} className="relative aspect-video rounded border border-border overflow-hidden bg-muted">
+                                              <Image
+                                                src={url || "/placeholder.svg"}
+                                                alt={`Retry ${retry.retryIndex + 1} screenshot ${idx + 1}`}
+                                                fill
+                                                className="object-contain"
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : null}
                               </div>
-                              <p className="text-xs text-muted-foreground">{screenshot.name}</p>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    {testCase.status === "flaky" && (
-                      <div className="rounded-lg bg-yellow-500/10 p-4 border border-yellow-500/20">
-                        <p className="text-sm font-medium text-yellow-500 mb-2">Flaky Test</p>
-                        <p className="text-xs text-yellow-400">
+                    {testCase.status === "flaky" && (!testCase.retryResults || testCase.retryResults.length === 0) && (
+                      <div className="rounded-lg bg-yellow-50 dark:bg-yellow-950/30 p-4 border border-yellow-200 dark:border-yellow-800">
+                        <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Flaky Test</p>
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300">
                           This test passed after {testCase.retries} {testCase.retries === 1 ? "retry" : "retries"}
                         </p>
                       </div>

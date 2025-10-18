@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertTriangle, FileText, ImageIcon, Filter, ArrowUpDown } from "lucide-react"
+import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertTriangle, FileText, ImageIcon, Filter, ArrowUpDown, ExternalLink, GitCommit, GitBranch } from "lucide-react"
 import Link from "next/link"
 import type { TestRun } from "@/lib/mock-data"
 import Image from "next/image"
@@ -145,8 +145,40 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                   <Clock className="h-3 w-3" />
                   {testRun.duration}
                 </span>
-                <span className="text-xs">{testRun.commit.slice(0, 7)}</span>
+                <span className="flex items-center gap-1">
+                  <GitCommit className="h-3 w-3" />
+                  <span className="text-xs font-mono">{testRun.commit.slice(0, 7)}</span>
+                </span>
               </div>
+              
+              {/* CI Metadata Links */}
+              {(testRun as any).ci_metadata && ((testRun as any).ci_metadata.commitHref || (testRun as any).ci_metadata.buildHref) && (
+                <div className="flex items-center gap-3 mt-2">
+                  {(testRun as any).ci_metadata.commitHref && (
+                    <a
+                      href={(testRun as any).ci_metadata.commitHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
+                    >
+                      <GitCommit className="h-3 w-3" />
+                      View Commit
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                  {(testRun as any).ci_metadata.buildHref && (
+                    <a
+                      href={(testRun as any).ci_metadata.buildHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
+                    >
+                      GitHub Actions Run
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -7,3 +7,5 @@
 DROP TABLE IF EXISTS public.test_results CASCADE;
 DROP TABLE IF EXISTS public.tests CASCADE;
 DROP TABLE IF EXISTS public.test_runs CASCADE;
+DROP TABLE IF EXISTS public.test_triggers CASCADE;
+DROP TABLE IF EXISTS public.environments CASCADE;

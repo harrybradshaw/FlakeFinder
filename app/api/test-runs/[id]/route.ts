@@ -15,10 +15,14 @@ export async function GET(
     const { createClient } = await import("@supabase/supabase-js")
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
-    // Fetch test run
+    // Fetch test run with joined environment and trigger
     const { data: testRun, error: runError } = await supabase
       .from("test_runs")
-      .select("*")
+      .select(`
+        *,
+        environment:environments(name, display_name, color),
+        trigger:test_triggers(name, display_name, icon)
+      `)
       .eq("id", id)
       .single()
 
@@ -82,8 +86,12 @@ export async function GET(
     const response = {
       id: testRun.id,
       timestamp: testRun.timestamp,
-      environment: testRun.environment,
-      trigger: testRun.trigger,
+      environment: (testRun as any).environment?.name || 'unknown',
+      environment_display: (testRun as any).environment?.display_name || 'Unknown',
+      environment_color: (testRun as any).environment?.color || '#3b82f6',
+      trigger: (testRun as any).trigger?.name || 'unknown',
+      trigger_display: (testRun as any).trigger?.display_name || 'Unknown',
+      trigger_icon: (testRun as any).trigger?.icon || '▶️',
       branch: testRun.branch,
       commit: testRun.commit,
       total: testRun.total,
@@ -92,6 +100,7 @@ export async function GET(
       flaky: testRun.flaky,
       skipped: testRun.skipped,
       duration: formatDuration(testRun.duration),
+      ci_metadata: testRun.ci_metadata || {},
       tests: tests.map((test) => ({
         id: test.id,
         name: test.name,

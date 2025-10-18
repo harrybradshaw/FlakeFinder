@@ -116,6 +116,9 @@ export async function POST(request: NextRequest) {
         startTime?: string
       }>
     }> = []
+    
+    let ciMetadata: any = {}
+    let testExecutionTime: string | null = null
 
     // Check if this is an HTML report format
     const htmlFile = zip.file("index.html")
@@ -132,6 +135,27 @@ export async function POST(request: NextRequest) {
         const embeddedZip = await JSZip.loadAsync(new Uint8Array(embeddedBuffer))
         
         console.log("[v0] Embedded ZIP files:", Object.keys(embeddedZip.files).length)
+        
+        // Extract CI metadata and test execution time from report.json
+        const reportFile = embeddedZip.file("report.json")
+        if (reportFile) {
+          const reportContent = await reportFile.async("string")
+          const reportData = JSON.parse(reportContent)
+          if (reportData.metadata?.ci) {
+            ciMetadata = reportData.metadata.ci
+            console.log("[v0] Found CI metadata:", ciMetadata)
+          }
+          // Get the test execution start time
+          if (reportData.startTime) {
+            // startTime might be a number (ms since epoch) or ISO string
+            if (typeof reportData.startTime === 'number') {
+              testExecutionTime = new Date(reportData.startTime).toISOString()
+            } else {
+              testExecutionTime = reportData.startTime
+            }
+            console.log("[v0] Test execution time:", testExecutionTime)
+          }
+        }
         
         // Extract metadata from .dat files
         const metadataMap = new Map<string, any>()
@@ -374,15 +398,34 @@ export async function POST(request: NextRequest) {
     const durationMinutes = Math.floor(totalDuration / 60000)
     const durationSeconds = Math.floor((totalDuration % 60000) / 1000)
 
+    // Generate content hash for duplicate detection
+    // Hash includes: metadata + test names/statuses/files (not timestamps or durations)
+    const hashContent = {
+      environment,
+      trigger,
+      branch,
+      commit: commit || "unknown",
+      tests: tests.map(t => ({
+        name: t.name,
+        file: t.file,
+        status: t.status,
+      })).sort((a, b) => `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`))
+    }
+    const contentHash = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(JSON.stringify(hashContent))
+    ).then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''))
+
     const testRun = {
       id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
+      timestamp: testExecutionTime || new Date().toISOString(), // Use test execution time if available
       environment,
       trigger,
       branch,
       commit: commit || "unknown",
       ...stats,
       duration: `${durationMinutes}m ${durationSeconds}s`,
+      contentHash,
       tests,
     }
 
@@ -391,12 +434,72 @@ export async function POST(request: NextRequest) {
         const { createClient } = await import("@supabase/supabase-js")
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
+        // Look up environment and trigger IDs
+        const { data: environmentData, error: envError } = await supabase
+          .from("environments")
+          .select("id")
+          .eq("name", environment)
+          .eq("active", true)
+          .single()
+
+        if (envError || !environmentData) {
+          console.error("[v0] Environment not found:", environment, envError)
+          return NextResponse.json(
+            { error: `Environment '${environment}' not found. Please add it to the database first.` },
+            { status: 400 }
+          )
+        }
+
+        const { data: triggerData, error: triggerError } = await supabase
+          .from("test_triggers")
+          .select("id")
+          .eq("name", trigger)
+          .eq("active", true)
+          .single()
+
+        if (triggerError || !triggerData) {
+          console.error("[v0] Trigger not found:", trigger, triggerError)
+          return NextResponse.json(
+            { error: `Trigger '${trigger}' not found. Please add it to the database first.` },
+            { status: 400 }
+          )
+        }
+
+        const environmentId = environmentData.id
+        const triggerId = triggerData.id
+
+        // Check for duplicate
+        const { data: existingRuns, error: checkError } = await supabase
+          .from("test_runs")
+          .select("id, timestamp")
+          .eq("content_hash", contentHash)
+          .order("timestamp", { ascending: false })
+          .limit(1)
+
+        if (checkError) {
+          console.error("[v0] Error checking for duplicates:", checkError)
+        } else if (existingRuns && existingRuns.length > 0) {
+          const existing = existingRuns[0]
+          const existingTime = new Date(existing.timestamp).toLocaleString()
+          console.log("[v0] Duplicate detected! Existing run:", existing.id, "from", existingTime)
+          
+          return NextResponse.json(
+            {
+              error: "Duplicate upload detected",
+              message: `This exact test run was already uploaded on ${existingTime}. If you want to re-upload, please modify the tests or wait for different results.`,
+              existingRunId: existing.id,
+              isDuplicate: true,
+            },
+            { status: 409 }
+          )
+        }
+
         // Insert test run
         const { data: runData, error: runError } = await supabase
             .from("test_runs")
             .insert({
-              environment,
-              trigger,
+              environment_id: environmentId,
+              trigger_id: triggerId,
               branch,
               commit,
               total: stats.total,
@@ -406,6 +509,8 @@ export async function POST(request: NextRequest) {
               skipped: stats.skipped,
               duration: totalDuration,
               timestamp: testRun.timestamp,
+              ci_metadata: ciMetadata,
+              content_hash: contentHash,
             })
             .select()
             .single()

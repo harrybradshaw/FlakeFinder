@@ -2,8 +2,10 @@
 
 import { useState, useMemo } from "react"
 import useSWR from "swr"
+import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 import { TestRunsList } from "@/components/test-runs-list"
 import { TrendsChart } from "@/components/trends-chart"
 import { TestStats } from "@/components/test-stats"
@@ -19,10 +21,23 @@ const fetcher = async (url: string) => {
   return data.runs || []
 }
 
+const configFetcher = async (url: string) => {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error("Failed to fetch")
+  return response.json()
+}
+
 export function TestDashboard() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>("all")
   const [selectedTrigger, setSelectedTrigger] = useState<string>("all")
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("7d")
+  
+  // Fetch environments and triggers dynamically
+  const { data: environmentsData } = useSWR("/api/environments", configFetcher)
+  const { data: triggersData } = useSWR("/api/triggers", configFetcher)
+  
+  const environments = environmentsData?.environments || []
+  const triggers = triggersData?.triggers || []
 
   // Build API URL with query parameters
   const apiUrl = useMemo(() => {
@@ -62,7 +77,12 @@ export function TestDashboard() {
               <h1 className="text-2xl font-semibold text-foreground">Playwright Test Reports</h1>
               <p className="text-sm text-muted-foreground">Monitor your test results and trends</p>
             </div>
-            <UploadDialog />
+            <div className="flex items-center gap-3">
+              <Link href="/tests">
+                <Button variant="outline">Test Health</Button>
+              </Link>
+              <UploadDialog />
+            </div>
           </div>
         </div>
       </header>
@@ -75,9 +95,11 @@ export function TestDashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Environments</SelectItem>
-              <SelectItem value="production">Production</SelectItem>
-              <SelectItem value="staging">Staging</SelectItem>
-              <SelectItem value="development">Development</SelectItem>
+              {environments.map((env: any) => (
+                <SelectItem key={env.id} value={env.name}>
+                  {env.display_name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -87,10 +109,11 @@ export function TestDashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Triggers</SelectItem>
-              <SelectItem value="ci">CI</SelectItem>
-              <SelectItem value="pull_request">Pull Request</SelectItem>
-              <SelectItem value="merge_queue">Merge Queue</SelectItem>
-              <SelectItem value="post_deploy">Post Deploy</SelectItem>
+              {triggers.map((trig: any) => (
+                <SelectItem key={trig.id} value={trig.name}>
+                  {trig.display_name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 

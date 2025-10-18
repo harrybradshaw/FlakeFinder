@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
     const environment = searchParams.get("environment")
     const trigger = searchParams.get("trigger")
     const timeRange = searchParams.get("timeRange") || "7d"
+    const contentHash = searchParams.get("contentHash")
 
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       console.log("[API] Supabase not configured, returning empty array")
@@ -35,19 +36,56 @@ export async function GET(request: NextRequest) {
         startDate.setDate(now.getDate() - 7)
     }
 
-    // Build query
+    // Look up environment/trigger IDs if filters are provided
+    let environmentId = null
+    let triggerId = null
+
+    if (environment && environment !== "all") {
+      const { data: envData } = await supabase
+        .from("environments")
+        .select("id")
+        .eq("name", environment)
+        .eq("active", true)
+        .single()
+      
+      if (envData) environmentId = envData.id
+    }
+
+    if (trigger && trigger !== "all") {
+      const { data: trigData } = await supabase
+        .from("test_triggers")
+        .select("id")
+        .eq("name", trigger)
+        .eq("active", true)
+        .single()
+      
+      if (trigData) triggerId = trigData.id
+    }
+
+    // Fetch test runs from database with filters (join with environments and triggers)
     let query = supabase
       .from("test_runs")
-      .select("*")
-      .gte("timestamp", startDate.toISOString())
+      .select(`
+        *,
+        environment:environments(name, display_name, color),
+        trigger:test_triggers(name, display_name, icon)
+      `)
       .order("timestamp", { ascending: false })
 
-    // Apply filters
-    if (environment && environment !== "all") {
-      query = query.eq("environment", environment)
+    // Apply filters by ID
+    if (environmentId) {
+      query = query.eq("environment_id", environmentId)
     }
-    if (trigger && trigger !== "all") {
-      query = query.eq("trigger", trigger)
+    if (triggerId) {
+      query = query.eq("trigger_id", triggerId)
+    }
+    
+    // If contentHash is provided, search for that specific hash (for duplicate detection)
+    if (contentHash) {
+      query = query.eq("content_hash", contentHash).limit(1)
+    } else {
+      // Only apply time range filter if not searching by hash
+      query = query.gte("timestamp", startDate.toISOString())
     }
 
     const { data, error } = await query
@@ -58,11 +96,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform data to match frontend format
-    const runs = (data || []).map((run) => ({
+    const runs = (data || []).map((run: any) => ({
       id: run.id,
       timestamp: run.timestamp,
-      environment: run.environment,
-      trigger: run.trigger,
+      environment: run.environment?.name || 'unknown',
+      environment_display: run.environment?.display_name || 'Unknown',
+      environment_color: run.environment?.color || '#3b82f6',
+      trigger: run.trigger?.name || 'unknown',
+      trigger_display: run.trigger?.display_name || 'Unknown',
+      trigger_icon: run.trigger?.icon || '▶️',
       branch: run.branch,
       commit: run.commit,
       total: run.total,

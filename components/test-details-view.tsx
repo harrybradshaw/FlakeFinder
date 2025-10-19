@@ -37,7 +37,8 @@ import { TimelineView } from "@/components/timeline-view";
 import stripAnsi from "strip-ansi";
 
 interface TestCase {
-  id?: string;
+  id?: string; // UUID - primary key from tests table (this specific execution instance)
+  suite_test_id?: string; // UUID - foreign key to suite_tests table (the canonical test definition)
   name: string;
   file: string;
   status: "passed" | "failed" | "flaky" | "skipped";
@@ -79,47 +80,44 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
   const [activeTab, setActiveTab] = useState<string>("tests");
   const [expandedTestId, setExpandedTestId] = useState<string | null>(null);
 
-  // Use real test cases if available, otherwise generate mock ones
-  const allTestCases: TestCase[] =
-    testRun.tests && testRun.tests.length > 0
-      ? testRun.tests.map((test) => {
-          const retries =
-            test.retryResults?.map((retry) => ({
-              retryIndex: retry.retry_index ?? retry.retryIndex ?? 0,
-              status: retry.status,
-              duration: retry.duration,
-              error: retry.error,
-              errorStack: retry.error_stack ?? retry.errorStack,
-              screenshots: retry.screenshots || [],
-              attachments: retry.attachments || [],
-              startTime: retry.started_at || retry.startTime,
-            })) || [];
-
-          return {
-            id: test.id,
-            name: test.name,
-            file: test.file,
-            status:
-              test.status === "timedOut"
-                ? "failed"
-                : (test.status as "passed" | "failed" | "flaky" | "skipped"),
-            duration: formatDuration(test.duration),
-            error: test.error,
-            screenshots: test.screenshots?.map((url, idx) => ({
-              name: `screenshot-${idx + 1}.png`,
-              url,
-            })),
-            retryResults: retries,
-            // Raw data for timeline
-            worker_index: test.worker_index,
-            started_at: test.started_at,
-            durationMs: test.duration, // Keep original number for timeline
-          };
-        })
-      : generateMockTestCases(testRun);
-
   // Filter and sort tests
-  const testCases = useMemo(() => {
+  const [testCases, allTestCases] = useMemo(() => {
+    const allTestCases: TestCase[] =
+      testRun.tests?.map((test) => {
+        const retries =
+          test.retryResults?.map((retry) => ({
+            retryIndex: retry.retry_index ?? retry.retryIndex ?? 0,
+            status: retry.status,
+            duration: retry.duration,
+            error: retry.error,
+            errorStack: retry.error_stack ?? retry.errorStack,
+            screenshots: retry.screenshots || [],
+            attachments: retry.attachments || [],
+            startTime: retry.started_at || retry.startTime,
+          })) || [];
+
+        return {
+          id: test.id,
+          suite_test_id: test.suite_test_id,
+          name: test.name,
+          file: test.file,
+          status:
+            test.status === "timedOut"
+              ? "failed"
+              : (test.status as "passed" | "failed" | "flaky" | "skipped"),
+          duration: formatDuration(test.duration),
+          error: test.error,
+          screenshots: test.screenshots?.map((url, idx) => ({
+            name: `screenshot-${idx + 1}.png`,
+            url,
+          })),
+          retryResults: retries,
+          // Raw data for timeline
+          worker_index: test.worker_index,
+          started_at: test.started_at,
+          durationMs: test.duration, // Keep original number for timeline
+        };
+      }) ?? [];
     let filtered = allTestCases;
 
     // Apply status filter
@@ -127,21 +125,24 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
       filtered = filtered.filter((test) => test.status === statusFilter);
     }
 
-    return [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case "name":
-          return a.name.localeCompare(b.name);
-        case "duration":
-          return parseFloat(b.duration) - parseFloat(a.duration);
-        case "status": {
-          const statusOrder = { failed: 0, flaky: 1, skipped: 2, passed: 3 };
-          return statusOrder[a.status] - statusOrder[b.status];
+    return [
+      [...filtered].sort((a, b) => {
+        switch (sortBy) {
+          case "name":
+            return a.name.localeCompare(b.name);
+          case "duration":
+            return parseFloat(b.duration) - parseFloat(a.duration);
+          case "status": {
+            const statusOrder = { failed: 0, flaky: 1, skipped: 2, passed: 3 };
+            return statusOrder[a.status] - statusOrder[b.status];
+          }
+          default:
+            return 0;
         }
-        default:
-          return 0;
-      }
-    });
-  }, [allTestCases, statusFilter, sortBy]);
+      }),
+      allTestCases,
+    ];
+  }, [statusFilter, sortBy, testRun]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -607,29 +608,39 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                             </div>
                           )}
 
-                        <div className="space-y-2">
-                          <div className="flex items-start gap-2 text-sm">
-                            <span className="text-muted-foreground min-w-[80px]">
-                              File:
-                            </span>
-                            <span className="font-mono text-xs">
-                              {testCase.file}
-                            </span>
-                          </div>
-                          <div className="flex items-start gap-2 text-sm">
-                            <span className="text-muted-foreground min-w-[80px]">
-                              Duration:
-                            </span>
-                            <span>{testCase.duration}</span>
-                          </div>
-                          {testCase.browser && (
+                        <div className="space-y-2 flex justify-between">
+                          <div>
                             <div className="flex items-start gap-2 text-sm">
                               <span className="text-muted-foreground min-w-[80px]">
-                                Browser:
+                                File:
                               </span>
-                              <span>{testCase.browser}</span>
+                              <span className="font-mono text-xs">
+                                {testCase.file}
+                              </span>
                             </div>
-                          )}
+                            <div className="flex items-start gap-2 text-sm">
+                              <span className="text-muted-foreground min-w-[80px]">
+                                Duration:
+                              </span>
+                              <span>{testCase.duration}</span>
+                            </div>
+                            {testCase.browser && (
+                              <div className="flex items-start gap-2 text-sm">
+                                <span className="text-muted-foreground min-w-[80px]">
+                                  Browser:
+                                </span>
+                                <span>{testCase.browser}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <a href={`/tests/${testCase.suite_test_id}`}>
+                              <Button size="sm">
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                View Test Health
+                              </Button>
+                            </a>
+                          </div>
                         </div>
                       </div>
                     </AccordionContent>
@@ -701,70 +712,4 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
       </main>
     </div>
   );
-}
-
-// Helper function to generate mock test cases based on test run stats
-function generateMockTestCases(testRun: TestRun): TestCase[] {
-  const testCases: TestCase[] = [];
-  const testFiles = [
-    "tests/auth/login.spec.ts",
-    "tests/auth/signup.spec.ts",
-    "tests/checkout/cart.spec.ts",
-    "tests/checkout/payment.spec.ts",
-    "tests/product/search.spec.ts",
-    "tests/product/details.spec.ts",
-    "tests/user/profile.spec.ts",
-    "tests/user/settings.spec.ts",
-    "tests/admin/dashboard.spec.ts",
-    "tests/admin/users.spec.ts",
-  ];
-
-  const browsers = ["chromium", "firefox", "webkit"];
-
-  // Add passed tests
-  for (let i = 0; i < testRun.passed; i++) {
-    testCases.push({
-      name: `should ${["display correctly", "handle user input", "validate form", "submit successfully", "load data"][i % 5]}`,
-      file: testFiles[i % testFiles.length],
-      status: "passed" as const,
-      duration: `${Math.floor(Math.random() * 5000) + 500}ms`,
-      browser: browsers[i % browsers.length],
-    });
-  }
-
-  // Add failed tests
-  for (let i = 0; i < testRun.failed; i++) {
-    testCases.push({
-      name: `should ${["authenticate user", "process payment", "update profile", "delete item", "send notification"][i % 5]}`,
-      file: testFiles[(i + 3) % testFiles.length],
-      status: "failed" as const,
-      duration: `${Math.floor(Math.random() * 3000) + 1000}ms`,
-      browser: browsers[i % browsers.length],
-      error: `Error: Expected element to be visible\n    at tests/${testFiles[(i + 3) % testFiles.length]}:${Math.floor(Math.random() * 50) + 10}:${Math.floor(Math.random() * 20) + 5}\n\nExpected: visible\nReceived: hidden`,
-      screenshots: [
-        {
-          name: "test-failed-1.png",
-          url: "/failed-test-screenshot-showing-error-state.jpg",
-        },
-        {
-          name: "test-failed-2.png",
-          url: "/browser-console-with-error-messages.jpg",
-        },
-      ],
-    });
-  }
-
-  // Add flaky tests
-  for (let i = 0; i < testRun.flaky; i++) {
-    testCases.push({
-      name: `should ${["load async data", "handle race condition", "wait for animation", "sync state"][i % 4]}`,
-      file: testFiles[(i + 6) % testFiles.length],
-      status: "flaky" as const,
-      duration: `${Math.floor(Math.random() * 4000) + 2000}ms`,
-      browser: browsers[i % browsers.length],
-      retries: Math.floor(Math.random() * 2) + 1,
-    });
-  }
-
-  return testCases;
 }

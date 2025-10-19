@@ -1,5 +1,80 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { cache } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// Cached function to get user's organization IDs
+const getUserOrganizations = cache(async (userId: string) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return { userOrgIds: [], error: null };
+  }
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+  );
+
+  const { data: userOrgs, error: userOrgsError } = await supabase
+    .from("user_organizations")
+    .select("organization_id")
+    .eq("user_id", userId);
+
+  if (userOrgsError) {
+    return { userOrgIds: [], error: userOrgsError };
+  }
+
+  const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
+  return { userOrgIds, error: null };
+});
+
+// Cached function to get organization projects
+const getOrganizationProjects = cache(async (userOrgIds: string[]) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return { projectIds: [], error: null };
+  }
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+  );
+
+  const { data: orgProjects, error: orgProjectsError } = await supabase
+    .from("organization_projects")
+    .select("project_id, organization_id")
+    .in("organization_id", userOrgIds);
+
+  if (orgProjectsError) {
+    return { projectIds: [], error: orgProjectsError };
+  }
+
+  const projectIds = orgProjects?.map((op) => op.project_id) || [];
+  return { projectIds, error: null };
+});
+
+// Cached function to get project details
+const getProjectDetails = cache(async (projectIds: string[]) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return { projects: [], error: null };
+  }
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+  );
+
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .in("id", projectIds)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  if (error) {
+    return { projects: [], error };
+  }
+
+  return { projects: data || [], error: null };
+});
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,17 +92,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects: [] });
     }
 
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY,
-    );
-
-    // Get user's custom organization memberships
-    const { data: userOrgs, error: userOrgsError } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .eq("user_id", userId);
+    // Get user's custom organization memberships (cached)
+    const { userOrgIds, error: userOrgsError } = await getUserOrganizations(userId);
 
     if (userOrgsError) {
       console.error("[API] Error fetching user organizations:", userOrgsError);
@@ -37,8 +103,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
-
     console.log("[API] User organizations:", userOrgIds);
 
     if (userOrgIds.length === 0) {
@@ -46,14 +110,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects: [] });
     }
 
-    // Query projects that belong to user's organizations
-    const { data: orgProjects, error: orgProjectsError } = await supabase
-      .from("organization_projects")
-      .select("project_id, organization_id")
-      .in("organization_id", userOrgIds);
+    // Query projects that belong to user's organizations (cached)
+    const { projectIds, error: orgProjectsError } = await getOrganizationProjects(userOrgIds);
 
     console.log("[API] Organization projects query result:", {
-      data: orgProjects,
+      projectIds,
       error: orgProjectsError,
       userOrgIds,
     });
@@ -69,8 +130,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const projectIds = orgProjects?.map((op) => op.project_id) || [];
-
     console.log("[API] Project IDs from organization_projects:", projectIds);
 
     if (projectIds.length === 0) {
@@ -78,20 +137,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects: [] });
     }
 
-    // Fetch the actual project details
-    const { data, error } = await supabase
-      .from("projects")
-      .select("*")
-      .in("id", projectIds)
-      .eq("active", true)
-      .order("name", { ascending: true });
+    // Fetch the actual project details (cached)
+    const { projects, error } = await getProjectDetails(projectIds);
 
     if (error) {
       console.error("[API] Supabase error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ projects: data || [] });
+    return NextResponse.json({ projects });
   } catch (error) {
     console.error("[API] Error fetching projects:", error);
     return NextResponse.json(
@@ -142,7 +196,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,

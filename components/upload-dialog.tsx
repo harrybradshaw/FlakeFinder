@@ -86,9 +86,10 @@ export function UploadDialog() {
             filename.includes(envName) ||
             (envName === "production" && filename.includes("prod")) ||
             (envName === "staging" && filename.includes("stage")) ||
-            (envName === "development" && filename.includes("dev"))
+            (envName === "development" && (filename.includes("dev") || filename.includes("preview")))
           ) {
             detectedEnvironment = env.name;
+            console.log(`[Auto-detect] Detected environment from filename: ${env.name}`);
             break;
           }
         }
@@ -169,26 +170,57 @@ export function UploadDialog() {
 
             // Extract metadata
             const metadata = reportData.metadata?.ci || {};
+            console.log("[Auto-detect] CI metadata:", metadata);
 
             // Auto-fill commit if available
             if (metadata.commitHash && !commit) {
               setCommit(metadata.commitHash);
             }
 
-            // Extract branch from commit URL if possible
-            let detectedBranch = branch;
+            // Extract branch from CI metadata (prefer CI env vars over URL parsing)
+            let detectedBranch = 
+              metadata.GITHUB_HEAD_REF ||  // GitHub PR branch
+              metadata.GITHUB_REF_NAME ||   // GitHub branch/tag name
+              metadata.BRANCH ||
+              metadata.GIT_BRANCH ||
+              metadata.CI_COMMIT_BRANCH ||
+              null;
+            
+            console.log("[Auto-detect] Detected branch from CI metadata:", detectedBranch);
+            
+            // If we have PR metadata but no branch, extract from PR title
+            if (!detectedBranch && metadata.prTitle) {
+              // Try to extract ticket/issue key from PR title (e.g., "WS-2938: Fix something" -> "WS-2938")
+              const ticketMatch = metadata.prTitle.match(/^([A-Z]+-\d+)/);
+              if (ticketMatch) {
+                detectedBranch = ticketMatch[1];
+                console.log("[Auto-detect] Extracted branch from PR title:", detectedBranch);
+              } else {
+                // If no ticket pattern, use PR number from URL
+                const prMatch = metadata.prHref?.match(/\/pull\/(\d+)$/);
+                if (prMatch) {
+                  detectedBranch = `pr-${prMatch[1]}`;
+                  console.log("[Auto-detect] Using PR number as branch:", detectedBranch);
+                }
+              }
+            }
+            
+            // Fallback: try to extract from commit URL if CI metadata didn't have it
             if (!detectedBranch && metadata.commitHref) {
               const branchMatch = metadata.commitHref.match(/\/tree\/([^/]+)/);
               if (branchMatch) {
                 detectedBranch = branchMatch[1];
-              } else {
-                detectedBranch = "main";
+                console.log("[Auto-detect] Extracted branch from URL:", detectedBranch);
               }
-              setBranch(detectedBranch);
-            } else if (!detectedBranch) {
-              detectedBranch = "main";
-              setBranch(detectedBranch);
             }
+            
+            // Final fallback to "main" if nothing found
+            if (!detectedBranch) {
+              detectedBranch = "main";
+              console.log("[Auto-detect] No branch detected, defaulting to main");
+            }
+            
+            setBranch(detectedBranch);
 
             // Try to infer environment from branch name if not detected from filename
             if (!detectedEnvironment && detectedBranch) {

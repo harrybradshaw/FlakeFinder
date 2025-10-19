@@ -1,7 +1,33 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { cache } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET(request: NextRequest) {
+// Cached function to get all active environments
+const getActiveEnvironments = cache(async () => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return { environments: [], error: null };
+  }
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+  );
+
+  const { data, error } = await supabase
+    .from("environments")
+    .select("*")
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  if (error) {
+    return { environments: [], error };
+  }
+
+  return { environments: data || [], error: null };
+});
+
+export async function GET(_request: NextRequest) {
   try {
     // Verify authentication (middleware enforces this, but good practice to check)
     const { userId } = await auth();
@@ -14,24 +40,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ environments: [] });
     }
 
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY,
-    );
-
-    const { data, error } = await supabase
-      .from("environments")
-      .select("*")
-      .eq("active", true)
-      .order("name", { ascending: true });
+    // Get active environments (cached)
+    const { environments, error } = await getActiveEnvironments();
 
     if (error) {
       console.error("[API] Error fetching environments:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ environments: data || [] });
+    return NextResponse.json({ environments });
   } catch (error) {
     console.error("[API] Error fetching environments:", error);
     return NextResponse.json(

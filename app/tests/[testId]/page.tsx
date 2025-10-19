@@ -33,6 +33,7 @@ import {
 } from "recharts";
 
 interface TestHistory {
+  testRunId: string;
   timestamp: string;
   status: string;
   duration: number;
@@ -362,8 +363,9 @@ export default function TestDetailPage({
                   .reverse()
                   .slice(0, 20)
                   .map((item, idx) => (
-                    <div
+                    <a
                       key={idx}
+                      href={`/runs/${item.testRunId}`}
                       className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50"
                     >
                       <div className="flex items-center gap-3">
@@ -401,7 +403,7 @@ export default function TestDetailPage({
                       <div className="text-sm text-muted-foreground">
                         {(item.duration / 1000).toFixed(2)}s
                       </div>
-                    </div>
+                    </a>
                   ))}
               </div>
             </Card>

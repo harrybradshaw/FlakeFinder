@@ -7,16 +7,8 @@ export async function GET(
   try {
     const { testId } = await params;
 
-    // Decode test identifier (base64 encoded "name::file")
-    const decoded = Buffer.from(testId, "base64").toString("utf-8");
-    const [testName, testFile] = decoded.split("::");
-
-    if (!testName || !testFile) {
-      return NextResponse.json(
-        { error: "Invalid test identifier" },
-        { status: 400 },
-      );
-    }
+    // testId is now the suite_test_id (UUID)
+    const suiteTestId = testId;
 
     const searchParams = request.nextUrl.searchParams;
     const environment = searchParams.get("environment");
@@ -36,6 +28,21 @@ export async function GET(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+
+    // First, get the suite_test definition
+    const { data: suiteTest, error: suiteTestError } = await supabase
+      .from("suite_tests")
+      .select("id, project_id, file, name")
+      .eq("id", suiteTestId)
+      .single();
+
+    if (suiteTestError || !suiteTest) {
+      console.error("[API] Error fetching suite test:", suiteTestError);
+      return NextResponse.json(
+        { error: "Test not found" },
+        { status: 404 },
+      );
+    }
 
     // Calculate time range
     const now = new Date();
@@ -80,10 +87,11 @@ export async function GET(
       if (trigData) triggerId = trigData.id;
     }
 
-    // Build query for test_runs with filters
+    // Build query for test_runs with filters (for this project only)
     let runsQuery = supabase
       .from("test_runs")
       .select("id, timestamp, branch")
+      .eq("project_id", suiteTest.project_id)
       .gte("timestamp", startDate.toISOString())
       .order("timestamp", { ascending: true });
 
@@ -103,8 +111,9 @@ export async function GET(
 
     if (!runs || runs.length === 0) {
       return NextResponse.json({
-        name: testName,
-        file: testFile,
+        id: suiteTest.id,
+        name: suiteTest.name,
+        file: suiteTest.file,
         history: [],
         summary: {
           totalRuns: 0,
@@ -118,13 +127,12 @@ export async function GET(
 
     const runIds = runs.map((r) => r.id);
 
-    // Fetch this specific test across all runs
+    // Fetch this specific test across all runs using suite_test_id
     const { data: tests, error: testsError } = await supabase
       .from("tests")
       .select("status, duration, test_run_id, created_at")
       .in("test_run_id", runIds)
-      .eq("name", testName)
-      .eq("file", testFile);
+      .eq("suite_test_id", suiteTestId);
 
     if (testsError) {
       console.error("[API] Error fetching tests:", testsError);
@@ -139,6 +147,7 @@ export async function GET(
         status: test.status,
         duration: test.duration,
         branch: run?.branch,
+        testRunId: run?.id,
       };
     });
 
@@ -159,8 +168,9 @@ export async function GET(
     };
 
     return NextResponse.json({
-      name: testName,
-      file: testFile,
+      id: suiteTest.id,
+      name: suiteTest.name,
+      file: suiteTest.file,
       history,
       summary,
     });

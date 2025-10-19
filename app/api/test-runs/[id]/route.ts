@@ -115,10 +115,15 @@ export async function GET(
       );
     }
 
-    // Fetch associated tests
+    // Fetch associated tests with suite_test information (name and file)
     const { data: tests, error: testsError } = await supabase
       .from("tests")
-      .select("*")
+      .select(
+        `
+        *,
+        suite_test:suite_tests(id, name, file)
+      `,
+      )
       .eq("test_run_id", id)
       .order("created_at", { ascending: true });
 
@@ -155,18 +160,7 @@ export async function GET(
           retryResultsByTestId.set(result.test_id, []);
         }
         retryResultsByTestId.get(result.test_id).push(result);
-
-        // Debug: log if attachments exist
-        if (result.attachments && result.attachments.length > 0) {
-          console.log(
-            `[API] Retry result has ${result.attachments.length} attachments:`,
-            result.attachments.map((a: any) => a.name),
-          );
-        }
       }
-      console.log(
-        `[API] Grouped retry results for ${retryResultsByTestId.size} tests`,
-      );
     }
 
     // Transform data to match frontend format
@@ -194,11 +188,12 @@ export async function GET(
       duration: formatDuration(testRun.duration),
       ci_metadata: testRun.ci_metadata || {},
       tests: tests.map((test) => ({
-        id: test.id,
-        name: test.name,
+        id: test.id, // UUID - primary key in tests table (this specific execution instance)
+        suite_test_id: test.suite_test_id, // UUID - foreign key to suite_tests table (the canonical test definition)
+        name: (test as any).suite_test?.name || "Unknown Test", // Joined from suite_tests
+        file: (test as any).suite_test?.file || "unknown", // Joined from suite_tests
         status: test.status,
         duration: test.duration,
-        file: test.file,
         worker_index: test.worker_index,
         started_at: test.started_at,
         error: test.error,

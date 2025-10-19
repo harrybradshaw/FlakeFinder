@@ -22,7 +22,8 @@ export interface TestRun {
   uploaded_filename?: string;
   ci_metadata?: Record<string, any>;
   tests?: Array<{
-    id: string;
+    id: string; // UUID - primary key in tests table (this specific execution instance)
+    suite_test_id?: string; // UUID - foreign key to suite_tests table (the canonical test definition)
     name: string;
     status: "passed" | "failed" | "flaky" | "skipped" | "timedOut";
     duration: number;

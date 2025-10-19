@@ -59,18 +59,26 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const project = formData.get("project") as string;
-    const environment = formData.get("environment") as string;
+    let environment = formData.get("environment") as string;
     const trigger = formData.get("trigger") as string;
-    const branch = formData.get("branch") as string;
+    let branch = formData.get("branch") as string;
     const commit = formData.get("commit") as string;
 
-    if (!file || !environment || !trigger || !branch) {
+    console.log("[v0] Upload params:", { environment, trigger, branch, commit, fileName: file?.name });
+
+    if (!file || !environment || !trigger) {
       return NextResponse.json(
         {
-          error: "Missing required fields: file, environment, trigger, branch",
+          error: "Missing required fields: file, environment, trigger",
         },
         { status: 400 },
       );
+    }
+    
+    // Branch can be extracted from CI metadata later if not provided
+    if (!branch) {
+      branch = "unknown";
+      console.log("[v0] Branch not provided, will attempt to extract from CI metadata");
     }
 
     const arrayBuffer = await file.arrayBuffer();
@@ -160,6 +168,54 @@ export async function POST(request: NextRequest) {
           if (reportData.metadata?.ci) {
             ciMetadata = reportData.metadata.ci;
             console.log("[v0] Found CI metadata:", ciMetadata);
+            
+            // Always try to extract branch from CI metadata (prefer CI over form data)
+            let detectedBranch = 
+              ciMetadata.GITHUB_HEAD_REF || // GitHub PR branch
+              ciMetadata.GITHUB_REF_NAME ||  // GitHub branch/tag name
+              ciMetadata.BRANCH ||
+              ciMetadata.GIT_BRANCH ||
+              ciMetadata.CI_COMMIT_BRANCH ||
+              null;
+            
+            // If we have PR metadata but no branch, extract from PR title
+            if (!detectedBranch && ciMetadata.prTitle) {
+              // Try to extract ticket/issue key from PR title (e.g., "WS-2938: Fix something" -> "WS-2938")
+              const ticketMatch = ciMetadata.prTitle.match(/^([A-Z]+-\d+)/);
+              if (ticketMatch) {
+                detectedBranch = ticketMatch[1];
+                console.log("[v0] Extracted branch from PR title:", detectedBranch);
+              } else {
+                // If no ticket pattern, use PR number from URL
+                const prMatch = ciMetadata.prHref?.match(/\/pull\/(\d+)$/);
+                if (prMatch) {
+                  detectedBranch = `pr-${prMatch[1]}`;
+                  console.log("[v0] Using PR number as branch:", detectedBranch);
+                }
+              }
+            }
+            
+            if (detectedBranch) {
+              console.log(`[v0] Overriding branch "${branch}" with CI metadata: "${detectedBranch}"`);
+              branch = detectedBranch;
+            } else {
+              console.log("[v0] No branch found in CI metadata, using form value:", branch);
+            }
+            
+            // Map environment names (e.g., "preview" -> "development")
+            const environmentMapping: Record<string, string> = {
+              "preview": "development",
+              "dev": "development",
+              "prod": "production",
+              "stage": "staging",
+              "test": "testing",
+            };
+            
+            const normalizedEnv = environment.toLowerCase();
+            if (environmentMapping[normalizedEnv]) {
+              console.log(`[v0] Mapping environment "${environment}" -> "${environmentMapping[normalizedEnv]}"`);
+              environment = environmentMapping[normalizedEnv];
+            }
           }
           // Get the test execution start time
           if (reportData.startTime) {
@@ -462,6 +518,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Final validation and logging after CI metadata extraction
+    console.log("[v0] Final upload parameters after CI extraction:", { 
+      environment, 
+      trigger, 
+      branch, 
+      commit: commit || "unknown" 
+    });
+    
+    if (branch === "unknown") {
+      console.warn("[v0] WARNING: Branch is still 'unknown' after CI metadata extraction");
+    }
+
     const stats = {
       total: tests.filter((t) => t.status !== "skipped").length, // Only count tests that were actually run
       passed: tests.filter((t) => t.status === "passed").length,
@@ -698,21 +766,54 @@ export async function POST(request: NextRequest) {
         } else {
           console.log("[v0] Inserted test run:", runData);
 
-          // Insert individual tests
+          // First, upsert suite_tests (canonical test definitions)
+          const suiteTestsToUpsert = tests.map((test) => ({
+            project_id: projectId,
+            file: test.file,
+            name: test.name,
+          }));
+
+          const { data: suiteTests, error: suiteTestsError } = await supabase
+            .from("suite_tests")
+            .upsert(suiteTestsToUpsert, {
+              onConflict: "project_id,file,name",
+              ignoreDuplicates: false,
+            })
+            .select();
+
+          if (suiteTestsError) {
+            console.error("[v0] Failed to upsert suite_tests:", suiteTestsError);
+            return NextResponse.json(
+              { error: "Failed to create test definitions" },
+              { status: 500 },
+            );
+          }
+
+          console.log("[v0] Upserted suite_tests:", suiteTests?.length);
+
+          // Create a map of (file,name) -> suite_test_id for quick lookup
+          const suiteTestMap = new Map<string, string>();
+          for (const st of suiteTests || []) {
+            suiteTestMap.set(`${st.file}::${st.name}`, st.id);
+          }
+
+          // Insert individual test execution instances
           const testsToInsert = tests.map((test) => {
             const startedAt = test.started_at
               ? new Date(test.started_at).toISOString()
               : null;
+            const suiteTestId = suiteTestMap.get(`${test.file}::${test.name}`);
             console.log(
               `[v0] Inserting test "${test.name}" - started_at:`,
               startedAt,
+              "suite_test_id:",
+              suiteTestId,
             );
             return {
               test_run_id: runData.id,
-              name: test.name,
+              suite_test_id: suiteTestId,
               status: test.status,
               duration: test.duration,
-              file: test.file,
               worker_index: test.worker_index,
               started_at: startedAt,
               error: test.error,

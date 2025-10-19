@@ -26,6 +26,7 @@ import {
 import Link from "next/link";
 
 interface TestMetric {
+  suite_test_id: string;
   name: string;
   file: string;
   totalRuns: number;
@@ -265,13 +266,8 @@ export default function TestsPage() {
 
             <div className="space-y-2 flex flex-col">
               {filteredTests.map((test, idx) => {
-                // Create URL-safe test identifier
-                const testId = Buffer.from(
-                  `${test.name}::${test.file}`,
-                ).toString("base64");
-
                 return (
-                  <Link key={idx} href={`/tests/${testId}`}>
+                  <Link key={idx} href={`/tests/${test.suite_test_id}`}>
                     <Card className="p-4 hover:bg-muted/50 transition-colors cursor-pointer">
                       <div className="flex items-start gap-4">
                         <div className="flex-1 min-w-0">

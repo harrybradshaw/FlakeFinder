@@ -1,5 +1,41 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { cache } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// Cached function to get user's organizations with details
+const getUserOrganizationsWithDetails = cache(async (userId: string) => {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return { organizations: [], error: null };
+  }
+
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+  );
+
+  const { data: userOrgs, error: userOrgsError } = await supabase
+    .from("user_organizations")
+    .select(
+      `
+        *,
+        organization:organizations(*)
+      `,
+    )
+    .eq("user_id", userId);
+
+  if (userOrgsError) {
+    return { organizations: [], error: userOrgsError };
+  }
+
+  const organizations =
+    userOrgs?.map((uo) => ({
+      ...uo.organization,
+      role: uo.role,
+    })) || [];
+
+  return { organizations, error: null };
+});
 
 // GET - List all organizations the user belongs to
 export async function GET() {
@@ -20,22 +56,8 @@ export async function GET() {
       );
     }
 
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY,
-    );
-
-    // Get user's organization memberships
-    const { data: userOrgs, error: userOrgsError } = await supabase
-      .from("user_organizations")
-      .select(
-        `
-        *,
-        organization:organizations(*)
-      `,
-      )
-      .eq("user_id", userId);
+    // Get user's organization memberships (cached)
+    const { organizations, error: userOrgsError } = await getUserOrganizationsWithDetails(userId);
 
     if (userOrgsError) {
       console.error("[API] Error fetching user organizations:", userOrgsError);
@@ -44,12 +66,6 @@ export async function GET() {
         { status: 500 },
       );
     }
-
-    const organizations =
-      userOrgs?.map((uo) => ({
-        ...uo.organization,
-        role: uo.role,
-      })) || [];
 
     return NextResponse.json({ organizations });
   } catch (error) {
@@ -93,7 +109,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,

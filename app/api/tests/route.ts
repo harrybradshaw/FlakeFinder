@@ -87,10 +87,18 @@ export async function GET(request: NextRequest) {
 
     const runIds = runs.map((r) => r.id);
 
-    // Fetch all tests for these runs
+    // Fetch all test executions for these runs with suite_test information
     const { data: tests, error: testsError } = await supabase
       .from("tests")
-      .select("name, file, status, duration, test_run_id")
+      .select(
+        `
+        suite_test_id,
+        status,
+        duration,
+        test_run_id,
+        suite_test:suite_tests(id, name, file)
+      `,
+      )
       .in("test_run_id", runIds);
 
     if (testsError) {
@@ -98,10 +106,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: testsError.message }, { status: 500 });
     }
 
-    // Aggregate metrics by test name + file (unique test identifier)
+    // Aggregate metrics by suite_test_id (canonical test identifier)
     const testMetrics = new Map<
       string,
       {
+        suite_test_id: string;
         name: string;
         file: string;
         totalRuns: number;
@@ -115,12 +124,20 @@ export async function GET(request: NextRequest) {
     >();
 
     for (const test of tests || []) {
-      const key = `${test.name}::${test.file}`;
+      const suiteTestId = test.suite_test_id;
+      const suiteTest = (test as any).suite_test;
 
-      if (!testMetrics.has(key)) {
-        testMetrics.set(key, {
-          name: test.name,
-          file: test.file,
+      // Skip tests without suite_test reference (shouldn't happen with proper migration)
+      if (!suiteTestId || !suiteTest) {
+        console.warn("[API] Test without suite_test reference:", test);
+        continue;
+      }
+
+      if (!testMetrics.has(suiteTestId)) {
+        testMetrics.set(suiteTestId, {
+          suite_test_id: suiteTestId,
+          name: suiteTest.name,
+          file: suiteTest.file,
           totalRuns: 0,
           passed: 0,
           failed: 0,
@@ -131,7 +148,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      const metrics = testMetrics.get(key)!;
+      const metrics = testMetrics.get(suiteTestId)!;
       metrics.totalRuns++;
       metrics.totalDuration += test.duration || 0;
 
@@ -160,6 +177,7 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const testsResponse = Array.from(testMetrics.values()).map((metrics) => ({
+      suite_test_id: metrics.suite_test_id,
       name: metrics.name,
       file: metrics.file,
       totalRuns: metrics.totalRuns,

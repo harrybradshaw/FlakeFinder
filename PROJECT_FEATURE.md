@@ -3,6 +3,7 @@
 ## Overview
 
 The test viewer now supports organizing test runs by **projects**. This enables:
+
 - Multi-project test result tracking in a single instance
 - Future user-based access control (limiting which projects a user can see)
 - Better organization of test runs across different codebases or teams
@@ -29,7 +30,7 @@ CREATE TABLE public.projects (
 The `test_runs` table now includes a `project_id` foreign key:
 
 ```sql
-ALTER TABLE public.test_runs 
+ALTER TABLE public.test_runs
 ADD COLUMN project_id UUID NOT NULL REFERENCES public.projects(id);
 ```
 
@@ -38,6 +39,7 @@ ADD COLUMN project_id UUID NOT NULL REFERENCES public.projects(id);
 To apply the changes to an existing database:
 
 1. Run the migration script:
+
    ```bash
    psql $DATABASE_URL -f migrations/add_projects.sql
    ```
@@ -51,13 +53,13 @@ To apply the changes to an existing database:
 The upload endpoint now accepts an optional `project` parameter:
 
 ```typescript
-const formData = new FormData()
-formData.append('file', zipFile)
-formData.append('project', 'my-project')  // Optional, defaults to 'default'
-formData.append('environment', 'staging')
-formData.append('trigger', 'ci')
-formData.append('branch', 'main')
-formData.append('commit', 'abc123')
+const formData = new FormData();
+formData.append("file", zipFile);
+formData.append("project", "my-project"); // Optional, defaults to 'default'
+formData.append("environment", "staging");
+formData.append("trigger", "ci");
+formData.append("branch", "main");
+formData.append("commit", "abc123");
 ```
 
 If no project is specified, test runs are assigned to the `default` project.
@@ -75,6 +77,7 @@ GET /api/test-runs?project=my-project&environment=staging&timeRange=7d
 New endpoint to manage projects:
 
 **GET** `/api/projects` - List all active projects
+
 ```json
 {
   "projects": [
@@ -91,6 +94,7 @@ New endpoint to manage projects:
 ```
 
 **POST** `/api/projects` - Create a new project
+
 ```json
 {
   "name": "my-project",
@@ -105,6 +109,7 @@ New endpoint to manage projects:
 ### Test Run Display
 
 Test runs now display project information:
+
 - Project badge with custom color (only shown if not the default project)
 - Environment badge
 - Trigger badge with icon
@@ -115,17 +120,17 @@ The `TestRun` interface has been updated:
 
 ```typescript
 export interface TestRun {
-  id: string
-  timestamp: string
-  project?: string
-  project_display?: string
-  project_color?: string
-  environment: string
-  environment_display?: string
-  environment_color?: string
-  trigger: string
-  trigger_display?: string
-  trigger_icon?: string
+  id: string;
+  timestamp: string;
+  project?: string;
+  project_display?: string;
+  project_color?: string;
+  environment: string;
+  environment_display?: string;
+  environment_color?: string;
+  trigger: string;
+  trigger_display?: string;
+  trigger_icon?: string;
   // ... other fields
 }
 ```
@@ -133,6 +138,7 @@ export interface TestRun {
 ## Default Project
 
 A default project is automatically created during schema initialization:
+
 - **Name**: `default`
 - **Display Name**: `Default Project`
 - **Color**: `#3b82f6` (blue)

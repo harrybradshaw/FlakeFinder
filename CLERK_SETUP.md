@@ -45,6 +45,7 @@ pnpm dev
 ```
 
 Visit [http://localhost:3000](http://localhost:3000) and you should see:
+
 - **Sign In** and **Sign Up** buttons in the header (when logged out)
 - **User Button** with profile menu (when logged in)
 
@@ -55,9 +56,9 @@ Visit [http://localhost:3000](http://localhost:3000) and you should see:
 Uses the current `clerkMiddleware()` function (not the deprecated `authMiddleware`):
 
 ```typescript
-import { clerkMiddleware } from '@clerk/nextjs/server'
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-export default clerkMiddleware()
+export default clerkMiddleware();
 ```
 
 ### Root Layout (`app/layout.tsx`)
@@ -71,15 +72,15 @@ export default clerkMiddleware()
 To protect API routes or get user information:
 
 ```typescript
-import { auth } from '@clerk/nextjs/server'
+import { auth } from "@clerk/nextjs/server";
 
 export async function GET() {
-  const { userId } = await auth()
-  
+  const { userId } = await auth();
+
   if (!userId) {
-    return new Response('Unauthorized', { status: 401 })
+    return new Response("Unauthorized", { status: 401 });
   }
-  
+
   // Your protected logic here
 }
 ```
@@ -92,7 +93,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 export default async function Page() {
   const { userId } = await auth()
   const user = await currentUser()
-  
+
   return <div>Hello {user?.firstName}</div>
 }
 ```
@@ -106,10 +107,10 @@ import { useUser } from '@clerk/nextjs'
 
 export default function ClientComponent() {
   const { isLoaded, isSignedIn, user } = useUser()
-  
+
   if (!isLoaded) return <div>Loading...</div>
   if (!isSignedIn) return <div>Please sign in</div>
-  
+
   return <div>Hello {user.firstName}</div>
 }
 ```
@@ -143,16 +144,13 @@ export default function Page() {
 To protect specific routes, modify `middleware.ts`:
 
 ```typescript
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-const isProtectedRoute = createRouteMatcher([
-  '/dashboard(.*)',
-  '/admin(.*)',
-])
+const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/admin(.*)"]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) await auth.protect()
-})
+  if (isProtectedRoute(req)) await auth.protect();
+});
 ```
 
 ## Resources

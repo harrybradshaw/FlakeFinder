@@ -3,6 +3,7 @@
 ## Overview
 
 The test viewer now implements complete organization-based access control, where:
+
 - Users must be authenticated to access the application
 - Users must belong to a Clerk organization
 - Organizations are linked to specific projects
@@ -41,23 +42,26 @@ CREATE TABLE public.organization_projects (
 
 ```sql
 -- test_runs now includes project_id
-ALTER TABLE public.test_runs 
+ALTER TABLE public.test_runs
 ADD COLUMN project_id UUID NOT NULL REFERENCES public.projects(id);
 ```
 
 ### 2. Authentication & Authorization
 
 **Middleware Protection:**
+
 - All `/api/*` routes require authentication
 - Enforced by Clerk middleware in `middleware.ts`
 - Unauthenticated requests receive 401 Unauthorized
 
 **Organization-Based Access:**
+
 - Projects API returns only projects the user's organizations have access to
 - Test runs API filters by accessible projects
 - Upload API validates organization access before accepting uploads
 
 **Frontend Protection:**
+
 - Landing page shown to unauthenticated users
 - Test dashboard only loads for authenticated users
 - No API calls made until user is signed in
@@ -65,11 +69,13 @@ ADD COLUMN project_id UUID NOT NULL REFERENCES public.projects(id);
 ### 3. User Flow
 
 #### For Unauthenticated Users:
+
 1. Visit homepage → See landing page with sign up/sign in options
 2. No API calls are made
 3. No test data is attempted to load
 
 #### For Authenticated Users:
+
 1. Sign in → Redirected to dashboard
 2. System fetches user's organization memberships from Clerk
 3. Query database for projects linked to user's organizations
@@ -102,8 +108,8 @@ psql $DATABASE_URL -f schema.sql
 ```sql
 -- Link your organization to the default project
 INSERT INTO public.organization_projects (organization_id, project_id)
-SELECT 'org_YOUR_ORG_ID', id 
-FROM public.projects 
+SELECT 'org_YOUR_ORG_ID', id
+FROM public.projects
 WHERE name = 'default'
 ON CONFLICT (organization_id, project_id) DO NOTHING;
 ```
@@ -166,6 +172,7 @@ curl -X POST http://localhost:3000/api/upload-zip \
 ```
 
 The API will:
+
 1. Verify you're authenticated
 2. Check you belong to an organization
 3. Validate your organization has access to the specified project
@@ -178,12 +185,13 @@ The API will:
 **Cause:** User's organization isn't linked to any projects
 
 **Solution:**
+
 ```sql
 -- Check what organizations you belong to (check logs)
 -- Then link to a project
 INSERT INTO public.organization_projects (organization_id, project_id)
-SELECT 'org_YOUR_ACTUAL_ORG_ID', id 
-FROM public.projects 
+SELECT 'org_YOUR_ACTUAL_ORG_ID', id
+FROM public.projects
 WHERE name = 'default';
 ```
 
@@ -192,8 +200,10 @@ WHERE name = 'default';
 **Symptoms:** Database has links but API returns empty results
 
 **Solution:**
+
 1. Check logs for actual org ID: `[API] User organizations: [ 'org_...' ]`
 2. Update database:
+
 ```sql
 UPDATE public.organization_projects
 SET organization_id = 'org_CORRECT_ID_FROM_LOGS'
@@ -207,26 +217,31 @@ WHERE organization_id = 'org_OLD_ID';
 ### 7. Testing the Implementation
 
 **Test 1: Unauthenticated Access**
+
 1. Sign out
 2. Visit homepage
 3. ✅ Should see landing page (no API calls)
 
 **Test 2: Authenticated Without Organization**
+
 1. Sign in with account not in any organization
 2. ✅ Should see empty state / message about needing organization
 
 **Test 3: Authenticated With Organization Access**
+
 1. Sign in with account in organization
 2. Organization must be linked to at least one project
 3. ✅ Should see projects and test runs
 
 **Test 4: Upload to Unauthorized Project**
+
 1. Try uploading to a project your organization doesn't have access to
 2. ✅ Should receive 403 Forbidden error
 
 ### 8. Project Selector
 
 The header now includes a project selector dropdown (visible only when multiple projects exist):
+
 - Shows all projects the user's organizations have access to
 - Filters test runs by selected project
 - Persists selection in URL query parameters
@@ -234,20 +249,24 @@ The header now includes a project selector dropdown (visible only when multiple 
 ### 9. Security Features
 
 ✅ **Authentication:**
+
 - Clerk middleware protects all API routes
 - No API access without valid session
 
 ✅ **Authorization:**
+
 - Organization-based project access
 - Test runs filtered by accessible projects
 - Upload validation
 
 ✅ **Frontend Protection:**
+
 - Landing page for unauthenticated users
 - No unnecessary API calls
 - Dashboard only loads for authenticated users
 
 ✅ **Defense in Depth:**
+
 - Middleware-level protection
 - Route-level auth checks
 - Database-level access validation
@@ -263,6 +282,7 @@ The header now includes a project selector dropdown (visible only when multiple 
 ## Support
 
 For issues or questions:
+
 1. Check logs for organization IDs and error messages
 2. Verify database links in `organization_projects` table
 3. Confirm users are added to organizations in Clerk

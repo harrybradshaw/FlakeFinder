@@ -1,6 +1,7 @@
 # Flaky Test Improvements & Filtering Features
 
 ## Overview
+
 Enhanced the test viewer to display detailed retry information for flaky tests and added filtering/sorting capabilities for test cases.
 
 ## What's New
@@ -9,6 +10,7 @@ Enhanced the test viewer to display detailed retry information for flaky tests a
 
 **Before:** Flaky tests showed a simple message about retries
 **After:** Full breakdown of each retry attempt with:
+
 - Individual status for each attempt (passed/failed)
 - Duration for each retry
 - Error messages from failed attempts
@@ -35,6 +37,7 @@ CREATE TABLE public.test_results (
 ### 3. Upload Logic Enhanced
 
 Updated `/app/api/upload-zip/route.ts` to:
+
 - Capture ALL retry attempts from Playwright reports (not just the last one)
 - Store each retry with its screenshots and error messages
 - Insert retry data into `test_results` table
@@ -44,6 +47,7 @@ Updated `/app/api/upload-zip/route.ts` to:
 Added UI controls to filter and sort test cases:
 
 **Filters:**
+
 - All Tests
 - Failed only
 - Flaky only
@@ -51,6 +55,7 @@ Added UI controls to filter and sort test cases:
 - Skipped only
 
 **Sort Options:**
+
 - By Status (failed → flaky → skipped → passed)
 - By Name (alphabetical)
 - By Duration (longest first)
@@ -58,12 +63,14 @@ Added UI controls to filter and sort test cases:
 ### 5. UI Improvements
 
 **Test Case List:**
+
 - Added filter dropdown with status options
 - Added sort dropdown with sorting criteria
 - Shows filtered count: "Test Cases (15)"
 - Skipped tests now have a clock icon
 
 **Flaky Test Display:**
+
 - Expandable accordion showing all retry attempts
 - Each attempt shows:
   - Badge with attempt number
@@ -129,6 +136,7 @@ Run the updated `schema.sql` in your Supabase SQL editor:
 ### Upload New Test Results
 
 After applying the schema, upload a new Playwright test report:
+
 1. The system will extract all retry attempts
 2. Store them in the new `test_results` table
 3. Display them in the UI with full details
@@ -163,32 +171,35 @@ Now includes `retryResults` array for each test:
 
 ```typescript
 {
-  tests: [{
-    id: "...",
-    name: "should display correctly",
-    status: "flaky",
-    retryResults: [
-      {
-        retry_index: 0,
-        status: "failed",
-        duration: 2340,
-        error: "Timeout...",
-        screenshots: ["data:image/png;base64,..."]
-      },
-      {
-        retry_index: 1,
-        status: "passed",
-        duration: 1450,
-        screenshots: []
-      }
-    ]
-  }]
+  tests: [
+    {
+      id: "...",
+      name: "should display correctly",
+      status: "flaky",
+      retryResults: [
+        {
+          retry_index: 0,
+          status: "failed",
+          duration: 2340,
+          error: "Timeout...",
+          screenshots: ["data:image/png;base64,..."],
+        },
+        {
+          retry_index: 1,
+          status: "passed",
+          duration: 1450,
+          screenshots: [],
+        },
+      ],
+    },
+  ];
 }
 ```
 
 ## Future Enhancements
 
 Potential improvements:
+
 - Retry timeline visualization
 - Flakiness rate over time chart
 - Automatic flaky test detection

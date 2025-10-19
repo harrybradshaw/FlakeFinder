@@ -1,79 +1,96 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import useSWR from "swr"
-import useSWRImmutable from "swr/immutable"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { TestRunsList } from "@/components/test-runs-list"
-import { TrendsChart } from "@/components/trends-chart"
-import { TestStats } from "@/components/test-stats"
-import type { TestRun } from "@/lib/mock-data"
+import { useState, useMemo } from "react";
+import useSWR from "swr";
+import useSWRImmutable from "swr/immutable";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TestRunsList } from "@/components/test-runs-list";
+import { TrendsChart } from "@/components/trends-chart";
+import { TestStats } from "@/components/test-stats";
+import type { TestRun } from "@/lib/mock-data";
 
 const fetcher = async (url: string) => {
-  const response = await fetch(url)
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to fetch: ${response.statusText}`)
+    throw new Error(`Failed to fetch: ${response.statusText}`);
   }
-  const data = await response.json()
-  return data.runs || []
-}
+  const data = await response.json();
+  return data.runs || [];
+};
 
 const configFetcher = async (url: string) => {
-  const response = await fetch(url)
-  if (!response.ok) throw new Error("Failed to fetch")
-  return response.json()
-}
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Failed to fetch");
+  return response.json();
+};
 
 export function TestDashboard() {
-  const [selectedEnvironment, setSelectedEnvironment] = useState<string>("all")
-  const [selectedTrigger, setSelectedTrigger] = useState<string>("all")
-  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("7d")
-  
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string>("all");
+  const [selectedTrigger, setSelectedTrigger] = useState<string>("all");
+  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("7d");
+
   // Fetch environments and triggers dynamically
-  const { data: environmentsData } = useSWRImmutable("/api/environments", configFetcher, {
-    revalidateOnFocus: false,
-})
+  const { data: environmentsData } = useSWRImmutable(
+    "/api/environments",
+    configFetcher,
+    {
+      revalidateOnFocus: false,
+    },
+  );
   const { data: triggersData } = useSWR("/api/triggers", configFetcher, {
     revalidateOnFocus: false,
-})
-  
-  const environments = environmentsData?.environments || []
-  const triggers = triggersData?.triggers || []
+  });
+
+  const environments = environmentsData?.environments || [];
+  const triggers = triggersData?.triggers || [];
 
   // Build API URL with query parameters
   const apiUrl = useMemo(() => {
     const params = new URLSearchParams({
       timeRange: selectedTimeRange,
-    })
+    });
 
     if (selectedEnvironment !== "all") {
-      params.append("environment", selectedEnvironment)
+      params.append("environment", selectedEnvironment);
     }
     if (selectedTrigger !== "all") {
-      params.append("trigger", selectedTrigger)
+      params.append("trigger", selectedTrigger);
     }
 
-    return `/api/test-runs?${params.toString()}`
-  }, [selectedEnvironment, selectedTrigger, selectedTimeRange])
+    return `/api/test-runs?${params.toString()}`;
+  }, [selectedEnvironment, selectedTrigger, selectedTimeRange]);
 
   // Fetch data with SWR
-  const { data: testRuns, error, isLoading } = useSWR<TestRun[]>(apiUrl, fetcher, {
+  const {
+    data: testRuns,
+    error,
+    isLoading,
+  } = useSWR<TestRun[]>(apiUrl, fetcher, {
     revalidateOnFocus: false,
-  })
+  });
 
   const stats = {
     totalTests: testRuns?.reduce((acc, run) => acc + run.total, 0) || 0,
     passed: testRuns?.reduce((acc, run) => acc + run.passed, 0) || 0,
     failed: testRuns?.reduce((acc, run) => acc + run.failed, 0) || 0,
     flaky: testRuns?.reduce((acc, run) => acc + run.flaky, 0) || 0,
-  }
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6">
         <div className="mb-6 flex items-center gap-4">
-          <Select value={selectedEnvironment} onValueChange={setSelectedEnvironment}>
+          <Select
+            value={selectedEnvironment}
+            onValueChange={setSelectedEnvironment}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Environment" />
             </SelectTrigger>
@@ -101,7 +118,10 @@ export function TestDashboard() {
             </SelectContent>
           </Select>
 
-          <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
+          <Select
+            value={selectedTimeRange}
+            onValueChange={setSelectedTimeRange}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Time Range" />
             </SelectTrigger>
@@ -146,11 +166,14 @@ export function TestDashboard() {
                 <p className="text-destructive">Error: {error.message}</p>
               </div>
             ) : (
-              <TrendsChart runs={testRuns || []} timeRange={selectedTimeRange} />
+              <TrendsChart
+                runs={testRuns || []}
+                timeRange={selectedTimeRange}
+              />
             )}
           </TabsContent>
         </Tabs>
       </main>
     </div>
-  )
+  );
 }

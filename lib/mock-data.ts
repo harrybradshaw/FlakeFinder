@@ -1,51 +1,55 @@
 export interface TestRun {
-  id: string
-  timestamp: string
-  project?: string
-  project_display?: string
-  project_color?: string
-  environment: string
-  environment_display?: string
-  environment_color?: string
-  trigger: string
-  trigger_display?: string
-  trigger_icon?: string
-  branch: string
-  commit: string
-  total: number
-  passed: number
-  failed: number
-  flaky: number
-  skipped?: number
-  duration: string
-  hasScreenshots?: boolean
-  uploaded_filename?: string
-  ci_metadata?: Record<string, any>
+  id: string;
+  timestamp: string;
+  project?: string;
+  project_display?: string;
+  project_color?: string;
+  environment: string;
+  environment_display?: string;
+  environment_color?: string;
+  trigger: string;
+  trigger_display?: string;
+  trigger_icon?: string;
+  branch: string;
+  commit: string;
+  total: number;
+  passed: number;
+  failed: number;
+  flaky: number;
+  skipped?: number;
+  duration: string;
+  hasScreenshots?: boolean;
+  uploaded_filename?: string;
+  ci_metadata?: Record<string, any>;
   tests?: Array<{
-    id: string
-    name: string
-    status: "passed" | "failed" | "flaky" | "skipped" | "timedOut"
-    duration: number
-    file: string
-    worker_index?: number
-    started_at?: string
-    error?: string
-    screenshots?: string[]
+    id: string;
+    name: string;
+    status: "passed" | "failed" | "flaky" | "skipped" | "timedOut";
+    duration: number;
+    file: string;
+    worker_index?: number;
+    started_at?: string;
+    error?: string;
+    screenshots?: string[];
     retryResults?: Array<{
-      id?: string
-      retry_index?: number
-      retryIndex?: number
-      status: string
-      duration: number
-      error?: string
-      error_stack?: string
-      errorStack?: string
-      screenshots?: string[]
-      attachments?: Array<{name: string, contentType: string, content: string}>
-      started_at?: string
-      startTime?: string
-    }>
-  }>
+      id?: string;
+      retry_index?: number;
+      retryIndex?: number;
+      status: string;
+      duration: number;
+      error?: string;
+      error_stack?: string;
+      errorStack?: string;
+      screenshots?: string[];
+      attachments?: Array<{
+        name: string;
+        contentType: string;
+        content: string;
+      }>;
+      started_at?: string;
+      startTime?: string;
+    }>;
+  }>;
 }
 
 export const mockTestRuns: TestRun[] = [
@@ -189,4 +193,4 @@ export const mockTestRuns: TestRun[] = [
     duration: "12m 55s",
     hasScreenshots: false,
   },
-]
+];

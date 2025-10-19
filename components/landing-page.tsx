@@ -1,7 +1,7 @@
-import { SignInButton, SignUpButton } from "@clerk/nextjs"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { CheckCircle2, TrendingUp, Users, Shield } from "lucide-react"
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { CheckCircle2, TrendingUp, Users, Shield } from "lucide-react";
 
 export function LandingPage() {
   return (
@@ -13,12 +13,15 @@ export function LandingPage() {
             FlakeFinder
           </h1>
           <p className="text-xl text-muted-foreground mb-8">
-            Monitor your Playwright test results and trends over time. 
-            Track flaky tests, identify patterns, and improve test reliability.
+            Monitor your Playwright test results and trends over time. Track
+            flaky tests, identify patterns, and improve test reliability.
           </p>
           <div className="flex items-center justify-center gap-4">
             <SignUpButton mode="modal">
-              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Button
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
                 Get Started
               </Button>
             </SignUpButton>
@@ -39,7 +42,8 @@ export function LandingPage() {
               </div>
               <h3 className="font-semibold mb-2">Test Results</h3>
               <p className="text-sm text-muted-foreground">
-                View detailed test results with screenshots, error messages, and retry attempts
+                View detailed test results with screenshots, error messages, and
+                retry attempts
               </p>
             </div>
           </Card>
@@ -51,7 +55,8 @@ export function LandingPage() {
               </div>
               <h3 className="font-semibold mb-2">Trends & Analytics</h3>
               <p className="text-sm text-muted-foreground">
-                Track pass rates over time and identify flaky tests that need attention
+                Track pass rates over time and identify flaky tests that need
+                attention
               </p>
             </div>
           </Card>
@@ -75,7 +80,8 @@ export function LandingPage() {
               </div>
               <h3 className="font-semibold mb-2">Secure & Private</h3>
               <p className="text-sm text-muted-foreground">
-                Your test data is secure with authentication and organization-level access
+                Your test data is secure with authentication and
+                organization-level access
               </p>
             </div>
           </Card>
@@ -90,7 +96,9 @@ export function LandingPage() {
                 1
               </div>
               <div>
-                <h3 className="font-semibold mb-1">Sign Up & Create Organization</h3>
+                <h3 className="font-semibold mb-1">
+                  Sign Up & Create Organization
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   Create an account and set up your organization to get started
                 </p>
@@ -104,7 +112,8 @@ export function LandingPage() {
               <div>
                 <h3 className="font-semibold mb-1">Upload Test Results</h3>
                 <p className="text-sm text-muted-foreground">
-                  Upload your Playwright HTML report as a ZIP file through the dashboard
+                  Upload your Playwright HTML report as a ZIP file through the
+                  dashboard
                 </p>
               </div>
             </div>
@@ -116,7 +125,8 @@ export function LandingPage() {
               <div>
                 <h3 className="font-semibold mb-1">Monitor & Analyze</h3>
                 <p className="text-sm text-muted-foreground">
-                  View trends, identify flaky tests, and improve your test suite reliability
+                  View trends, identify flaky tests, and improve your test suite
+                  reliability
                 </p>
               </div>
             </div>
@@ -124,7 +134,10 @@ export function LandingPage() {
 
           <div className="mt-12">
             <SignUpButton mode="modal">
-              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Button
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
                 Start Monitoring Your Tests
               </Button>
             </SignUpButton>
@@ -132,5 +145,5 @@ export function LandingPage() {
         </div>
       </main>
     </div>
-  )
+  );
 }

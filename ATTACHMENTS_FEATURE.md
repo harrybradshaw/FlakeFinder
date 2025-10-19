@@ -1,17 +1,20 @@
 # Test Attachments Feature
 
 ## Overview
+
 The test viewer now captures and displays all attachments from Playwright test runs, providing rich context for debugging.
 
 ## What's Captured
 
 ### Text/Data Attachments
+
 - **Route Selection** - Test parameters like origin/destination
 - **Test Configuration** - Environment settings, feature flags, etc.
 - **stdout/stderr** - Console output from test execution
 - **Custom Test Data** - Any text data attached via `test.attach()`
 
 ### Visual Attachments
+
 - **Screenshots** - Error screenshots and test checkpoints
 - **Videos** - (if configured in Playwright)
 - **Trace Files** - Referenced but not displayed inline
@@ -19,11 +22,13 @@ The test viewer now captures and displays all attachments from Playwright test r
 ## Schema Changes
 
 Added `attachments` JSONB column to `test_results` table:
+
 ```sql
 attachments JSONB DEFAULT '[]'::jsonb
 ```
 
 Stores attachments as JSON array:
+
 ```json
 [
   {
@@ -32,7 +37,7 @@ Stores attachments as JSON array:
     "content": "Origin: KGX\nDestination: EDB"
   },
   {
-    "name": "Test Configuration", 
+    "name": "Test Configuration",
     "contentType": "text/plain",
     "content": "Environment: staging\nFeature flags: {...}"
   }
@@ -42,6 +47,7 @@ Stores attachments as JSON array:
 ## Upload Logic
 
 The upload API now:
+
 1. Scans all result attachments
 2. Extracts image attachments separately (for screenshots)
 3. Captures text/data attachments with inline `body` content
@@ -51,7 +57,7 @@ The upload API now:
 // Processes attachments like:
 {
   name: "Route Selection",
-  contentType: "text/plain", 
+  contentType: "text/plain",
   body: "Origin: KGX\nDestination: EDB"
 }
 ```
@@ -92,15 +98,15 @@ Attachments appear in each retry attempt under **"Test Context"**:
 
 ```typescript
 // Attach custom data to tests
-await test.step('Setup', async () => {
-  await test.attach('Route Selection', {
+await test.step("Setup", async () => {
+  await test.attach("Route Selection", {
     body: `Origin: ${origin}\nDestination: ${destination}`,
-    contentType: 'text/plain'
+    contentType: "text/plain",
   });
-  
-  await test.attach('Test Configuration', {
+
+  await test.attach("Test Configuration", {
     body: JSON.stringify(config, null, 2),
-    contentType: 'application/json'
+    contentType: "application/json",
   });
 });
 ```

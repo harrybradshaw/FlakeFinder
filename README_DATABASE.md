@@ -3,7 +3,9 @@
 ## Tables Created
 
 ### `test_runs`
+
 Stores high-level information about each test run:
+
 - `id` - Unique identifier (UUID)
 - `environment` - Environment where tests ran (e.g., "staging", "production")
 - `trigger` - What triggered the test run (e.g., "manual", "ci")
@@ -18,7 +20,9 @@ Stores high-level information about each test run:
 - `timestamp` - When the test run occurred
 
 ### `tests`
+
 Stores individual test results:
+
 - `id` - Unique identifier (UUID)
 - `test_run_id` - Foreign key to `test_runs`
 - `name` - Test name/title
@@ -31,17 +35,21 @@ Stores individual test results:
 ## Applying the Schema
 
 ### Method 1: Supabase Dashboard
+
 1. Go to your Supabase project dashboard
 2. Navigate to **SQL Editor**
 3. Copy the contents of `schema.sql`
 4. Paste and click **Run**
 
 ### Method 2: Command Line
+
 If you have `psql` configured:
+
 ```bash
 psql $DATABASE_URL -f schema.sql
 ```
 
 ## Security Notes
-The schema includes Row Level Security (RLS) policies that allow all operations. 
+
+The schema includes Row Level Security (RLS) policies that allow all operations.
 You may want to tighten these based on your security requirements.

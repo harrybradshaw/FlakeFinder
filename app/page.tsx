@@ -1,6 +1,6 @@
-import { SignedIn, SignedOut } from "@clerk/nextjs"
-import { TestDashboard } from "@/components/test-dashboard"
-import { LandingPage } from "@/components/landing-page"
+import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { TestDashboard } from "@/components/test-dashboard";
+import { LandingPage } from "@/components/landing-page";
 
 export default function Home() {
   return (
@@ -12,5 +12,5 @@ export default function Home() {
         <TestDashboard />
       </SignedIn>
     </>
-  )
+  );
 }

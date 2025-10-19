@@ -1,11 +1,13 @@
 # Scalable Environments & Triggers System
 
 ## Overview
+
 The system now uses dedicated database tables for environments and triggers with foreign key relationships, making it easy to add new values without code changes.
 
 ## Database Schema
 
 ### Environments Table
+
 ```sql
 CREATE TABLE public.environments (
     id UUID PRIMARY KEY,
@@ -19,6 +21,7 @@ CREATE TABLE public.environments (
 ```
 
 ### Test Triggers Table
+
 ```sql
 CREATE TABLE public.test_triggers (
     id UUID PRIMARY KEY,
@@ -32,6 +35,7 @@ CREATE TABLE public.test_triggers (
 ```
 
 ### Test Runs (Updated)
+
 ```sql
 CREATE TABLE public.test_runs (
     ...
@@ -44,6 +48,7 @@ CREATE TABLE public.test_runs (
 ## Default Data
 
 ### Environments
+
 ```sql
 INSERT INTO environments (name, display_name, color) VALUES
     ('production', 'Production', '#ef4444'),     -- Red
@@ -52,6 +57,7 @@ INSERT INTO environments (name, display_name, color) VALUES
 ```
 
 ### Triggers
+
 ```sql
 INSERT INTO test_triggers (name, display_name, icon) VALUES
     ('ci', 'CI', '🔄'),
@@ -63,18 +69,21 @@ INSERT INTO test_triggers (name, display_name, icon) VALUES
 ## Adding New Values
 
 ### Add a New Environment (via SQL)
+
 ```sql
 INSERT INTO public.environments (name, display_name, description, color)
 VALUES ('uat', 'UAT', 'User Acceptance Testing', '#8b5cf6');
 ```
 
 ### Add a New Trigger (via SQL)
+
 ```sql
 INSERT INTO public.test_triggers (name, display_name, description, icon)
 VALUES ('nightly', 'Nightly', 'Nightly regression tests', '🌙');
 ```
 
 ### Disable Without Deleting
+
 ```sql
 UPDATE public.environments SET active = false WHERE name = 'uat';
 UPDATE public.test_triggers SET active = false WHERE name = 'nightly';
@@ -83,9 +92,11 @@ UPDATE public.test_triggers SET active = false WHERE name = 'nightly';
 ## API Endpoints
 
 ### GET /api/environments
+
 Returns all active environments.
 
 **Response:**
+
 ```json
 {
   "environments": [
@@ -102,9 +113,11 @@ Returns all active environments.
 ```
 
 ### GET /api/triggers
+
 Returns all active triggers.
 
 **Response:**
+
 ```json
 {
   "triggers": [
@@ -123,6 +136,7 @@ Returns all active triggers.
 ## Frontend Integration
 
 ### Upload Dialog
+
 Dropdowns now populate dynamically from the API:
 
 ```typescript
@@ -143,6 +157,7 @@ const triggers = triggersData?.triggers || []
 ```
 
 ### Test Run Display
+
 Test runs now include rich metadata:
 
 ```typescript
@@ -163,8 +178,14 @@ Test runs now include rich metadata:
 3. **Upload API receives** → `environment: "production"`, `trigger: "merge_queue"`
 4. **API looks up IDs**:
    ```typescript
-   const env = await db.environments.findOne({ name: "production", active: true })
-   const trig = await db.test_triggers.findOne({ name: "merge_queue", active: true })
+   const env = await db.environments.findOne({
+     name: "production",
+     active: true,
+   });
+   const trig = await db.test_triggers.findOne({
+     name: "merge_queue",
+     active: true,
+   });
    ```
 5. **Insert with FKs**:
    ```sql
@@ -175,26 +196,31 @@ Test runs now include rich metadata:
 ## Benefits
 
 ### ✅ Scalability
+
 - Add unlimited environments/triggers
 - No code deployment needed
 - Just run SQL INSERT
 
 ### ✅ Data Integrity
+
 - Foreign key constraints
 - Can't delete env/trigger in use
 - Referential integrity enforced
 
 ### ✅ Rich Metadata
+
 - Colors for visual distinction
 - Icons for quick recognition
 - Descriptions for clarity
 
 ### ✅ Backwards Compatible
+
 - Frontend still uses name strings
 - API transparently handles FK lookup
 - No breaking changes
 
 ### ✅ Flexible Management
+
 - Disable without deleting (active flag)
 - Update display names/colors anytime
 - Historical data preserved
@@ -202,6 +228,7 @@ Test runs now include rich metadata:
 ## Use Cases
 
 ### Multi-Region Environments
+
 ```sql
 INSERT INTO environments (name, display_name, color) VALUES
     ('prod-us', 'Production US', '#ef4444'),
@@ -210,6 +237,7 @@ INSERT INTO environments (name, display_name, color) VALUES
 ```
 
 ### Custom Triggers
+
 ```sql
 INSERT INTO test_triggers (name, display_name, icon) VALUES
     ('release-candidate', 'Release Candidate', '🎯'),
@@ -218,6 +246,7 @@ INSERT INTO test_triggers (name, display_name, icon) VALUES
 ```
 
 ### Temporary Environments
+
 ```sql
 INSERT INTO environments (name, display_name, color) VALUES
     ('feature-abc', 'Feature ABC', '#a855f7');
@@ -229,21 +258,23 @@ UPDATE environments SET active = false WHERE name = 'feature-abc';
 ## Migration Instructions
 
 ### For Fresh Installation
+
 1. Run `teardown.sql` to drop old tables
 2. Run `schema.sql` to create new structure
 3. Default environments/triggers are auto-inserted
 
 ### Adding Custom Values
+
 ```sql
 -- Add your custom environments
 INSERT INTO public.environments (name, display_name, description, color)
-VALUES 
+VALUES
     ('qa', 'QA', 'Quality Assurance environment', '#10b981'),
     ('demo', 'Demo', 'Demo environment for clients', '#6366f1');
 
 -- Add your custom triggers
 INSERT INTO public.test_triggers (name, display_name, description, icon)
-VALUES 
+VALUES
     ('manual', 'Manual', 'Manually triggered tests', '👤'),
     ('scheduled', 'Scheduled', 'Scheduled test runs', '⏰');
 ```
@@ -251,6 +282,7 @@ VALUES
 ## Future Admin UI
 
 The system is designed for a future admin page where you can:
+
 - Add/edit environments (name, display, color)
 - Add/edit triggers (name, display, icon)
 - Enable/disable without deleting
@@ -258,6 +290,7 @@ The system is designed for a future admin page where you can:
 - Manage via UI instead of SQL
 
 ### Suggested Admin UI Features:
+
 ```
 ┌─ Environments ──────────────────┐
 │ [+ Add Environment]              │
@@ -273,35 +306,36 @@ The system is designed for a future admin page where you can:
 ## Querying
 
 ### Get test runs with environment/trigger names
+
 ```typescript
-const runs = await supabase
-  .from("test_runs")
-  .select(`
+const runs = await supabase.from("test_runs").select(`
     *,
     environment:environments(name, display_name, color),
     trigger:test_triggers(name, display_name, icon)
-  `)
+  `);
 ```
 
 ### Filter by environment name
+
 ```typescript
 // Get environment ID first
 const { data: env } = await supabase
   .from("environments")
   .select("id")
   .eq("name", "production")
-  .single()
+  .single();
 
 // Then query test runs
 const { data: runs } = await supabase
   .from("test_runs")
   .select("*")
-  .eq("environment_id", env.id)
+  .eq("environment_id", env.id);
 ```
 
 ## Color Palette Suggestions
 
 For additional environments:
+
 - `#22c55e` - Green (success/stable)
 - `#06b6d4` - Cyan (preview)
 - `#8b5cf6` - Purple (special/UAT)
@@ -311,6 +345,7 @@ For additional environments:
 ## Icon Suggestions
 
 For additional triggers:
+
 - `⏰` - Scheduled
 - `👤` - Manual
 - `🔥` - Hotfix

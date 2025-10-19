@@ -56,6 +56,7 @@ export function UploadDialog() {
     id: string;
   } | null>(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
 
   // Fetch environments, triggers, and suites dynamically
   const { data: environmentsData } = useSWRImmutable(
@@ -68,6 +69,110 @@ export function UploadDialog() {
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
   const suites = suitesData?.suites || [];
+
+  const compressImage = async (imageData: Uint8Array, filename: string): Promise<Uint8Array> => {
+    try {
+      // Convert to blob
+      const blob = new Blob([imageData], { type: 'image/png' });
+      
+      // Create image element
+      const img = new Image();
+      const imageUrl = URL.createObjectURL(blob);
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = imageUrl;
+      });
+      
+      // Create canvas and compress
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return imageData;
+      
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(imageUrl);
+      
+      // Convert to JPEG with 80% quality (much smaller than PNG)
+      const compressedBlob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.8);
+      });
+      
+      const compressedData = new Uint8Array(await compressedBlob.arrayBuffer());
+      
+      const originalSize = imageData.length;
+      const compressedSize = compressedData.length;
+      const savings = ((1 - compressedSize / originalSize) * 100).toFixed(0);
+      
+      console.log(`[Optimize] Compressed ${filename}: ${(originalSize / 1024).toFixed(0)}KB → ${(compressedSize / 1024).toFixed(0)}KB (${savings}% smaller)`);
+      
+      return compressedData;
+    } catch (error) {
+      console.warn(`[Optimize] Failed to compress ${filename}, using original`);
+      return imageData;
+    }
+  };
+
+  const optimizeZip = async (zip: any): Promise<Blob> => {
+    // Create a new ZIP with only essential files
+    const JSZip = (await import("jszip")).default;
+    const optimizedZip = new JSZip();
+
+    let removedCount = 0;
+    let keptCount = 0;
+    let compressedCount = 0;
+
+    // Patterns to exclude (large files we don't use)
+    const excludePatterns = [
+      /data\/.*\.zip$/, // All ZIPs in data folder (traces, etc.)
+      /data\/trace\//, // Entire trace directory
+      /\.trace$/, // Raw trace files
+      /video\.webm$/, // Videos (we only use screenshots)
+      /\.har$/, // HAR files (network logs)
+      /\.network$/, // Network logs
+    ];
+
+    for (const [path, file] of Object.entries(zip.files)) {
+      const zipFile = file as any;
+      if (zipFile.dir) {
+        optimizedZip.folder(path);
+        continue;
+      }
+
+      const shouldExclude = excludePatterns.some((pattern) =>
+        pattern.test(path),
+      );
+
+      if (shouldExclude) {
+        removedCount++;
+        console.log(`[Optimize] Removing: ${path}`);
+      } else {
+        const content = await zipFile.async("uint8array");
+        
+        // Compress PNG screenshots to JPEG
+        if (path.endsWith('.png') && (path.includes('screenshot') || path.includes('data/'))) {
+          const compressed = await compressImage(content, path);
+          // Change extension to .jpg
+          const newPath = path.replace(/\.png$/, '.jpg');
+          optimizedZip.file(newPath, compressed);
+          compressedCount++;
+        } else {
+          optimizedZip.file(path, content);
+        }
+        
+        keptCount++;
+      }
+    }
+
+    console.log(
+      `[Optimize] Kept ${keptCount} files, removed ${removedCount} files, compressed ${compressedCount} images`,
+    );
+
+    return await optimizedZip.generateAsync({ type: "blob" });
+  };
 
   const extractMetadataFromZip = async (file: File) => {
     try {
@@ -89,10 +194,13 @@ export function UploadDialog() {
             filename.includes(envName) ||
             (envName === "production" && filename.includes("prod")) ||
             (envName === "staging" && filename.includes("stage")) ||
-            (envName === "development" && (filename.includes("dev") || filename.includes("preview")))
+            (envName === "development" &&
+              (filename.includes("dev") || filename.includes("preview")))
           ) {
             detectedEnvironment = env.name;
-            console.log(`[Auto-detect] Detected environment from filename: ${env.name}`);
+            console.log(
+              `[Auto-detect] Detected environment from filename: ${env.name}`,
+            );
             break;
           }
         }
@@ -181,48 +289,62 @@ export function UploadDialog() {
             }
 
             // Extract branch from CI metadata (prefer CI env vars over URL parsing)
-            let detectedBranch = 
-              metadata.GITHUB_HEAD_REF ||  // GitHub PR branch
-              metadata.GITHUB_REF_NAME ||   // GitHub branch/tag name
+            let detectedBranch =
+              metadata.GITHUB_HEAD_REF || // GitHub PR branch
+              metadata.GITHUB_REF_NAME || // GitHub branch/tag name
               metadata.BRANCH ||
               metadata.GIT_BRANCH ||
               metadata.CI_COMMIT_BRANCH ||
               null;
-            
-            console.log("[Auto-detect] Detected branch from CI metadata:", detectedBranch);
-            
+
+            console.log(
+              "[Auto-detect] Detected branch from CI metadata:",
+              detectedBranch,
+            );
+
             // If we have PR metadata but no branch, extract from PR title
             if (!detectedBranch && metadata.prTitle) {
               // Try to extract ticket/issue key from PR title (e.g., "WS-2938: Fix something" -> "WS-2938")
               const ticketMatch = metadata.prTitle.match(/^([A-Z]+-\d+)/);
               if (ticketMatch) {
                 detectedBranch = ticketMatch[1];
-                console.log("[Auto-detect] Extracted branch from PR title:", detectedBranch);
+                console.log(
+                  "[Auto-detect] Extracted branch from PR title:",
+                  detectedBranch,
+                );
               } else {
                 // If no ticket pattern, use PR number from URL
                 const prMatch = metadata.prHref?.match(/\/pull\/(\d+)$/);
                 if (prMatch) {
                   detectedBranch = `pr-${prMatch[1]}`;
-                  console.log("[Auto-detect] Using PR number as branch:", detectedBranch);
+                  console.log(
+                    "[Auto-detect] Using PR number as branch:",
+                    detectedBranch,
+                  );
                 }
               }
             }
-            
+
             // Fallback: try to extract from commit URL if CI metadata didn't have it
             if (!detectedBranch && metadata.commitHref) {
               const branchMatch = metadata.commitHref.match(/\/tree\/([^/]+)/);
               if (branchMatch) {
                 detectedBranch = branchMatch[1];
-                console.log("[Auto-detect] Extracted branch from URL:", detectedBranch);
+                console.log(
+                  "[Auto-detect] Extracted branch from URL:",
+                  detectedBranch,
+                );
               }
             }
-            
+
             // Final fallback to "main" if nothing found
             if (!detectedBranch) {
               detectedBranch = "main";
-              console.log("[Auto-detect] No branch detected, defaulting to main");
+              console.log(
+                "[Auto-detect] No branch detected, defaulting to main",
+              );
             }
-            
+
             setBranch(detectedBranch);
 
             // Try to infer environment from branch name if not detected from filename
@@ -261,11 +383,19 @@ export function UploadDialog() {
             if (detectedEnvironment) setEnvironment(detectedEnvironment);
             if (detectedTrigger) setTrigger(detectedTrigger);
 
-            // Ask server to check for duplicate using the actual ZIP file
+            // Ask server to check for duplicate using optimized ZIP file
             setCheckingDuplicate(true);
             try {
+              // Optimize the ZIP before sending for duplicate check
+              const optimizedBlob = await optimizeZip(zip);
+              console.log(
+                "[Duplicate Check] Using optimized ZIP:",
+                (optimizedBlob.size / 1024 / 1024).toFixed(2),
+                "MB",
+              );
+
               const formData = new FormData();
-              formData.append("file", file);
+              formData.append("file", optimizedBlob, file.name);
               formData.append(
                 "environment",
                 detectedEnvironment || environment,
@@ -442,9 +572,32 @@ export function UploadDialog() {
           setResult({ success: false, message: data.error || "Upload failed" });
         }
       } else {
-        // Handle ZIP file upload
+        // Handle ZIP file upload - optimize first to remove trace files
+        setOptimizing(true);
+        console.log(
+          "[Upload] Original file size:",
+          (file.size / 1024 / 1024).toFixed(2),
+          "MB",
+        );
+
+        const JSZip = (await import("jszip")).default;
+        const zip = await JSZip.loadAsync(file);
+        const optimizedBlob = await optimizeZip(zip);
+
+        console.log(
+          "[Upload] Optimized file size:",
+          (optimizedBlob.size / 1024 / 1024).toFixed(2),
+          "MB",
+        );
+        console.log(
+          "[Upload] Saved:",
+          ((file.size - optimizedBlob.size) / 1024 / 1024).toFixed(2),
+          "MB",
+        );
+        setOptimizing(false);
+
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", optimizedBlob, file.name);
         formData.append("environment", environment);
         formData.append("trigger", trigger);
         formData.append("suite", suite);
@@ -484,7 +637,7 @@ export function UploadDialog() {
           }
         }
       }
-    } catch (error) {
+    } catch {
       setResult({
         success: false,
         message: "Failed to parse or upload test results",
@@ -781,6 +934,7 @@ export function UploadDialog() {
               onClick={handleUpload}
               disabled={
                 uploading ||
+                optimizing ||
                 !file ||
                 !environment ||
                 !trigger ||
@@ -790,13 +944,15 @@ export function UploadDialog() {
                 checkingDuplicate
               }
             >
-              {uploading
-                ? "Uploading..."
-                : checkingDuplicate
-                  ? "Checking..."
-                  : isDuplicate
-                    ? "Duplicate - Cannot Upload"
-                    : "Upload"}
+              {optimizing
+                ? "Optimizing..."
+                : uploading
+                  ? "Uploading..."
+                  : checkingDuplicate
+                    ? "Checking..."
+                    : isDuplicate
+                      ? "Duplicate - Cannot Upload"
+                      : "Upload"}
             </Button>
           )}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { Card } from "@/components/ui/card";
 import {
@@ -14,14 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
-  CheckCircle2,
-  XCircle,
   AlertTriangle,
-  TrendingUp,
-  TrendingDown,
+  ArrowLeft,
+  CheckCircle2,
   Minus,
   Search,
-  ArrowLeft,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -114,7 +114,7 @@ export default function TestsPage() {
     }
 
     // Apply sorting
-    const sorted = [...filtered].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "health":
           return a.health - b.health; // Worst health first
@@ -130,8 +130,6 @@ export default function TestsPage() {
           return 0;
       }
     });
-
-    return sorted;
   }, [tests, searchQuery, sortBy]);
 
   const getHealthBadge = (health: number) => {
@@ -159,7 +157,7 @@ export default function TestsPage() {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/">
+            <Link href="/" prefetch={false}>
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
@@ -267,7 +265,11 @@ export default function TestsPage() {
             <div className="space-y-2 flex flex-col">
               {filteredTests.map((test, idx) => {
                 return (
-                  <Link key={idx} href={`/tests/${test.suite_test_id}`}>
+                  <Link
+                    key={idx}
+                    href={`/tests/${test.suite_test_id}`}
+                    prefetch={false}
+                  >
                     <Card className="p-4 hover:bg-muted/50 transition-colors cursor-pointer">
                       <div className="flex items-start gap-4">
                         <div className="flex-1 min-w-0">

@@ -77,7 +77,7 @@ export function AppHeader() {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <Link href="/">
+            <Link href="/" prefetch={false}>
               <h1 className="text-2xl font-semibold text-foreground hover:text-foreground/80 cursor-pointer">
                 FlakeFinder
               </h1>
@@ -122,7 +122,7 @@ export function AppHeader() {
               </SignUpButton>
             </SignedOut>
             <SignedIn>
-              <Link href="/tests">
+              <Link href="/tests" prefetch={false}>
                 <Button variant="outline">Test Health</Button>
               </Link>
 

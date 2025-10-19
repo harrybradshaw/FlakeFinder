@@ -32,10 +32,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { TestRun } from "@/lib/mock-data";
-import Image from "next/image";
 import { TimelineView } from "@/components/timeline-view";
 import { TestCaseDetails } from "@/components/test-case-details";
-import stripAnsi from "strip-ansi";
 
 interface TestCase {
   id?: string; // UUID - primary key from tests table (this specific execution instance)
@@ -150,7 +148,7 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/">
+            <Link href="/" prefetch={false}>
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="h-4 w-4" />
               </Button>

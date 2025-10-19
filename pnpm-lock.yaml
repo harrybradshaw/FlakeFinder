@@ -135,7 +135,7 @@ importers:
         specifier: ^0.454.0
         version: 0.454.0(react@19.0.0)
       next:
-        specifier: 15.5.6
+        specifier: ^15.5.6
         version: 15.5.6(@babel/core@7.28.4)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       next-themes:
         specifier: ^0.4.6

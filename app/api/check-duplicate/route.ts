@@ -5,6 +5,10 @@ import {
   type TestResult 
 } from "@/lib/playwright-report-utils";
 
+// Configure route to accept larger payloads (up to 100MB)
+export const maxDuration = 60; // 60 seconds timeout
+export const dynamic = 'force-dynamic';
+
 interface DuplicateCheckResult {
   success: boolean;
   testCount: number;

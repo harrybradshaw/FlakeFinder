@@ -27,7 +27,7 @@ export function TestRunsList({ runs }: TestRunsListProps) {
         const status = run.failed === 0 ? "passed" : "failed";
 
         return (
-          <Link key={run.id} href={`/runs/${run.id}`}>
+          <Link key={run.id} href={`/runs/${run.id}`} prefetch={false}>
             <Card className="hover:bg-accent/50 transition-colors cursor-pointer overflow-hidden">
               <div className="p-4">
                 <div className="flex items-center justify-between">

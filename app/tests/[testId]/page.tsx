@@ -225,7 +225,7 @@ export default function TestDetailPage({
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/tests">
+            <Link href="/tests" prefetch={false}>
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="h-4 w-4" />
               </Button>

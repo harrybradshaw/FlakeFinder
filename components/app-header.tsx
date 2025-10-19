@@ -125,7 +125,6 @@ export function AppHeader() {
               <Link href="/tests" prefetch={false}>
                 <Button variant="outline">Test Health</Button>
               </Link>
-
               <UploadDialog />
               <UserButton />
             </SignedIn>

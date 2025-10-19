@@ -109,6 +109,39 @@ export class ReportProcessingError extends Error {
   }
 }
 
+/**
+ * Calculate a content hash for duplicate detection
+ * This hash is based ONLY on the intrinsic test execution data,
+ * NOT on user-selected metadata like environment, trigger, or branch.
+ * 
+ * @param tests - Array of test results
+ * @returns SHA-256 hash as hex string
+ */
+export async function calculateContentHash(tests: TestResult[]): Promise<string> {
+  const hashContent = {
+    tests: tests
+      .map((test) => ({
+        name: test.name,
+        file: test.file,
+        status: test.status,
+        duration: test.duration, // Include duration to detect re-runs
+        started_at: test.started_at, // Include timestamp to detect re-runs
+      }))
+      .sort((a, b) =>
+        `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
+      ),
+  };
+
+  const buffer = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(hashContent))
+  );
+
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 // Type guards
 function isTestSuiteArray(data: unknown): data is TestSuite[] {
   return Array.isArray(data) && data.every(

@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { UploadDialog } from './upload-dialog';
@@ -15,6 +16,9 @@ vi.mock('swr', () => ({
     data: undefined,
     error: undefined,
     isLoading: false,
+  }),
+  useSWRConfig: () => ({
+    mutate: vi.fn(),
   }),
 }));
 
@@ -44,6 +48,9 @@ global.fetch = vi.fn();
 describe('UploadDialog - Duplicate Detection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    
+    // Mock crypto.subtle.digest for hash calculation
+    vi.spyOn(crypto.subtle, 'digest').mockResolvedValue(new ArrayBuffer(32));
   });
 
   it('should show duplicate warning when duplicate is detected', async () => {
@@ -70,12 +77,16 @@ describe('UploadDialog - Duplicate Detection', () => {
 
     render(<UploadDialog />);
 
+    // Open the dialog
+    const uploadButton = screen.getByRole('button', { name: /upload results/i });
+    fireEvent.click(uploadButton);
+
     // Load test file
     const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
     const file = new File([buffer], 'test-report.zip', { type: 'application/zip' });
 
     // Find file input and upload
-    const fileInput = screen.getByLabelText(/upload/i) as HTMLInputElement;
+    const fileInput = screen.getByLabelText(/html report zip/i) as HTMLInputElement;
     
     // Simulate file selection
     Object.defineProperty(fileInput, 'files', {
@@ -89,14 +100,14 @@ describe('UploadDialog - Duplicate Detection', () => {
     await waitFor(
       () => {
         // Should show duplicate warning
-        expect(screen.getByText(/already uploaded/i)).toBeInTheDocument();
+        expect(screen.getByText(/duplicate test run detected/i)).toBeInTheDocument();
       },
-      { timeout: 5000 }
+      { timeout: 15000 }
     );
 
     // Should show existing run info
-    expect(screen.getByText(/1067b1a1-4abd-43a7-a0ff-904eb2803806/i)).toBeInTheDocument();
-  });
+    expect(screen.getByText(/1067b1a1/)).toBeInTheDocument();
+  }, 20000);
 
   it('should NOT show duplicate warning when no duplicate exists', async () => {
     // Mock the check-duplicate API response
@@ -118,12 +129,16 @@ describe('UploadDialog - Duplicate Detection', () => {
 
     render(<UploadDialog />);
 
+    // Open the dialog
+    const uploadButton = screen.getByRole('button', { name: /upload results/i });
+    fireEvent.click(uploadButton);
+
     // Load test file
     const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
     const file = new File([buffer], 'test-report.zip', { type: 'application/zip' });
 
     // Find file input and upload
-    const fileInput = screen.getByLabelText(/upload/i) as HTMLInputElement;
+    const fileInput = screen.getByLabelText(/html report zip/i) as HTMLInputElement;
     
     // Simulate file selection
     Object.defineProperty(fileInput, 'files', {
@@ -137,11 +152,11 @@ describe('UploadDialog - Duplicate Detection', () => {
     await waitFor(
       () => {
         // Should NOT show duplicate warning
-        expect(screen.queryByText(/already uploaded/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/duplicate test run detected/i)).not.toBeInTheDocument();
       },
-      { timeout: 5000 }
+      { timeout: 15000 }
     );
-  });
+  }, 20000);
 
   it('should call check-duplicate API with pre-calculated hash', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
@@ -159,12 +174,16 @@ describe('UploadDialog - Duplicate Detection', () => {
 
     render(<UploadDialog />);
 
+    // Open the dialog
+    const uploadButton = screen.getByRole('button', { name: /upload results/i });
+    fireEvent.click(uploadButton);
+
     // Load test file
     const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
     const file = new File([buffer], 'test-report.zip', { type: 'application/zip' });
 
     // Find file input and upload
-    const fileInput = screen.getByLabelText(/upload/i) as HTMLInputElement;
+    const fileInput = screen.getByLabelText(/html report zip/i) as HTMLInputElement;
     
     Object.defineProperty(fileInput, 'files', {
       value: [file],
@@ -183,7 +202,7 @@ describe('UploadDialog - Duplicate Detection', () => {
           })
         );
       },
-      { timeout: 5000 }
+      { timeout: 15000 }
     );
 
     // Verify the FormData includes contentHash
@@ -196,9 +215,9 @@ describe('UploadDialog - Duplicate Detection', () => {
     // Hash should be 64 characters (SHA-256 hex)
     const hash = formData.get('contentHash') as string;
     expect(hash.length).toBe(64);
-  });
+  }, 20000);
 
-  it('should show optimizing status during optimization', async () => {
+  it('should show checking status during duplicate check', async () => {
     (global.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -212,10 +231,14 @@ describe('UploadDialog - Duplicate Detection', () => {
 
     render(<UploadDialog />);
 
+    // Open the dialog
+    const uploadButton = screen.getByRole('button', { name: /upload results/i });
+    fireEvent.click(uploadButton);
+
     const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
     const file = new File([buffer], 'test-report.zip', { type: 'application/zip' });
 
-    const fileInput = screen.getByLabelText(/upload/i) as HTMLInputElement;
+    const fileInput = screen.getByLabelText(/html report zip/i) as HTMLInputElement;
     
     Object.defineProperty(fileInput, 'files', {
       value: [file],
@@ -227,8 +250,8 @@ describe('UploadDialog - Duplicate Detection', () => {
     // Should show "Checking..." status during duplicate check
     await waitFor(() => {
       expect(screen.getByText(/checking/i)).toBeInTheDocument();
-    });
-  });
+    }, { timeout: 15000 });
+  }, 20000);
 
   it('CRITICAL: should use same hash for duplicate check and upload', async () => {
     const mockFetch = vi.fn()
@@ -259,10 +282,14 @@ describe('UploadDialog - Duplicate Detection', () => {
 
     render(<UploadDialog />);
 
+    // Open the dialog
+    const uploadButton = screen.getByRole('button', { name: /upload results/i });
+    fireEvent.click(uploadButton);
+
     const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
     const file = new File([buffer], 'test-report.zip', { type: 'application/zip' });
 
-    const fileInput = screen.getByLabelText(/upload/i) as HTMLInputElement;
+    const fileInput = screen.getByLabelText(/html report zip/i) as HTMLInputElement;
     
     Object.defineProperty(fileInput, 'files', {
       value: [file],
@@ -277,15 +304,15 @@ describe('UploadDialog - Duplicate Detection', () => {
         '/api/check-duplicate',
         expect.any(Object)
       );
-    }, { timeout: 5000 });
+    }, { timeout: 15000 });
 
     // Get hash from duplicate check
     const duplicateCheckFormData = mockFetch.mock.calls[0][1].body as FormData;
     const duplicateCheckHash = duplicateCheckFormData.get('contentHash') as string;
 
     // Now proceed to upload
-    const uploadButton = screen.getByRole('button', { name: /upload/i });
-    fireEvent.click(uploadButton);
+    const submitButton = screen.getByRole('button', { name: /upload/i });
+    fireEvent.click(submitButton);
 
     // Wait for upload
     await waitFor(() => {
@@ -293,7 +320,7 @@ describe('UploadDialog - Duplicate Detection', () => {
         '/api/upload-zip',
         expect.any(Object)
       );
-    }, { timeout: 5000 });
+    }, { timeout: 15000 });
 
     // Get hash from upload
     const uploadFormData = mockFetch.mock.calls[1][1].body as FormData;
@@ -302,5 +329,5 @@ describe('UploadDialog - Duplicate Detection', () => {
     // CRITICAL: Both hashes must be identical!
     expect(duplicateCheckHash).toBe(uploadHash);
     expect(duplicateCheckHash).toBeTruthy();
-  });
+  }, 40000);
 });

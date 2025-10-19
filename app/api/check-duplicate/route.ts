@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { 
   processPlaywrightReportFile,
   ReportProcessingError,
+  calculateContentHash,
   type TestResult 
 } from "@/lib/playwright-report-utils";
 
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
     const trigger = formData.get("trigger") as string | null;
     const branch = formData.get("branch") as string | null;
     const commit = formData.get("commit") as string | null;
+    const preCalculatedHash = formData.get("contentHash") as string | null;
 
     // Validate required fields
     if (!file || !environment || !trigger || !branch) {
@@ -60,24 +62,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Process the uploaded file using our shared utility
-    const { tests, metadata } = await processPlaywrightReportFile(file);
-    
-    if (tests.length === 0) {
-      return NextResponse.json(
-        { error: "No tests found in the uploaded report" },
-        { status: 400 }
-      );
+    let contentHash: string;
+    let tests: TestResult[];
+    let metadata: Record<string, any> | undefined;
+
+    // If hash was pre-calculated (from optimized upload), use it
+    // Otherwise calculate from the file
+    if (preCalculatedHash) {
+      console.log("[Duplicate Check] Using pre-calculated hash:", preCalculatedHash);
+      contentHash = preCalculatedHash;
+      // Still need to process file to get test count for response
+      const processed = await processPlaywrightReportFile(file);
+      tests = processed.tests;
+      metadata = processed.metadata;
+    } else {
+      // Legacy path: calculate hash from file
+      console.log("[Duplicate Check] Calculating hash from file");
+      const processed = await processPlaywrightReportFile(file);
+      tests = processed.tests;
+      metadata = processed.metadata;
+      
+      if (tests.length === 0) {
+        return NextResponse.json(
+          { error: "No tests found in the uploaded report" },
+          { status: 400 }
+        );
+      }
+      
+      contentHash = await calculateContentHash(tests);
     }
-    
-    // Calculate a unique hash for this test run
-    const contentHash = await calculateTestRunHash({
-      environment,
-      trigger,
-      branch,
-      commit: commit || "unknown",
-      tests
-    });
 
     // Check for duplicates in the database
     const duplicateCheck = await checkForDuplicateRun(contentHash);
@@ -126,43 +139,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Calculates a unique hash for a test run based on its content
- */
-async function calculateTestRunHash(params: {
-  environment: string | null;
-  trigger: string | null;
-  branch: string | null;
-  commit: string;
-  tests: TestResult[];
-}): Promise<string> {
-  const { environment, trigger, branch, commit, tests } = params;
-  
-  const hashContent = {
-    environment,
-    trigger,
-    branch,
-    commit,
-    tests: tests
-      .map((test) => ({
-        name: test.name,
-        file: test.file,
-        status: test.status,
-      }))
-      .sort((a, b) =>
-        `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-      ),
-  };
-
-  const buffer = await crypto.subtle.digest(
-    "SHA-256", 
-    new TextEncoder().encode(JSON.stringify(hashContent))
-  );
-
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 /**
  * Checks if a test run with the given hash already exists in the database

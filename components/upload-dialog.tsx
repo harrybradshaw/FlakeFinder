@@ -1,7 +1,6 @@
 "use client";
 
 import type React from "react";
-
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import useSWRImmutable from "swr/immutable";
@@ -24,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Upload, XCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const fetcher = async (url: string) => {
@@ -57,6 +56,7 @@ export function UploadDialog() {
   } | null>(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
+  const [calculatedHash, setCalculatedHash] = useState<string | null>(null);
 
   // Fetch environments, triggers, and suites dynamically
   const { data: environmentsData } = useSWRImmutable(
@@ -70,47 +70,42 @@ export function UploadDialog() {
   const triggers = triggersData?.triggers || [];
   const suites = suitesData?.suites || [];
 
-  const compressImage = async (imageData: Uint8Array, filename: string): Promise<Uint8Array> => {
+  const compressImage = async (
+    imageData: Uint8Array,
+    filename: string,
+  ): Promise<Uint8Array> => {
     try {
       // Convert to blob
-      const blob = new Blob([imageData], { type: 'image/png' });
-      
+      const blob = new Blob([imageData], { type: "image/png" });
+
       // Create image element
       const img = new Image();
       const imageUrl = URL.createObjectURL(blob);
-      
+
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = reject;
         img.src = imageUrl;
       });
-      
+
       // Create canvas and compress
-      const canvas = document.createElement('canvas');
+      const canvas = document.createElement("canvas");
       canvas.width = img.width;
       canvas.height = img.height;
-      
-      const ctx = canvas.getContext('2d');
+
+      const ctx = canvas.getContext("2d");
       if (!ctx) return imageData;
-      
+
       ctx.drawImage(img, 0, 0);
       URL.revokeObjectURL(imageUrl);
-      
+
       // Convert to JPEG with 80% quality (much smaller than PNG)
       const compressedBlob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.8);
+        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.8);
       });
-      
-      const compressedData = new Uint8Array(await compressedBlob.arrayBuffer());
-      
-      const originalSize = imageData.length;
-      const compressedSize = compressedData.length;
-      const savings = ((1 - compressedSize / originalSize) * 100).toFixed(0);
-      
-      console.log(`[Optimize] Compressed ${filename}: ${(originalSize / 1024).toFixed(0)}KB → ${(compressedSize / 1024).toFixed(0)}KB (${savings}% smaller)`);
-      
-      return compressedData;
-    } catch (error) {
+
+      return new Uint8Array(await compressedBlob.arrayBuffer());
+    } catch {
       console.warn(`[Optimize] Failed to compress ${filename}, using original`);
       return imageData;
     }
@@ -120,10 +115,6 @@ export function UploadDialog() {
     // Create a new ZIP with only essential files
     const JSZip = (await import("jszip")).default;
     const optimizedZip = new JSZip();
-
-    let removedCount = 0;
-    let keptCount = 0;
-    let compressedCount = 0;
 
     // Patterns to exclude (large files we don't use)
     const excludePatterns = [
@@ -147,29 +138,24 @@ export function UploadDialog() {
       );
 
       if (shouldExclude) {
-        removedCount++;
         console.log(`[Optimize] Removing: ${path}`);
       } else {
         const content = await zipFile.async("uint8array");
-        
+
         // Compress PNG screenshots to JPEG
-        if (path.endsWith('.png') && (path.includes('screenshot') || path.includes('data/'))) {
+        if (
+          path.endsWith(".png") &&
+          (path.includes("screenshot") || path.includes("data/"))
+        ) {
           const compressed = await compressImage(content, path);
           // Change extension to .jpg
-          const newPath = path.replace(/\.png$/, '.jpg');
+          const newPath = path.replace(/\.png$/, ".jpg");
           optimizedZip.file(newPath, compressed);
-          compressedCount++;
         } else {
           optimizedZip.file(path, content);
         }
-        
-        keptCount++;
       }
     }
-
-    console.log(
-      `[Optimize] Kept ${keptCount} files, removed ${removedCount} files, compressed ${compressedCount} images`,
-    );
 
     return await optimizedZip.generateAsync({ type: "blob" });
   };
@@ -182,7 +168,6 @@ export function UploadDialog() {
 
       // Extract info from filename
       const filename = file.name.toLowerCase();
-      console.log("[Auto-detect] Filename:", filename);
 
       // Detect environment from filename by checking against database values
       let detectedEnvironment = environment;
@@ -234,15 +219,11 @@ export function UploadDialog() {
 
       // Check for HTML report
       const htmlFile = zip.file("index.html");
-      console.log("[Auto-detect] HTML file found:", !!htmlFile);
-
       if (htmlFile) {
         const htmlContent = await htmlFile.async("string");
         const match = htmlContent.match(
           /window\.playwrightReportBase64 = "([^"]+)"/,
         );
-        console.log("[Auto-detect] Base64 match found:", !!match);
-
         if (match) {
           const dataUri = match[1];
           const base64Data = dataUri.replace(
@@ -258,30 +239,13 @@ export function UploadDialog() {
           }
 
           const embeddedZip = await JSZip.loadAsync(bytes);
-          console.log("[Auto-detect] Embedded ZIP loaded");
-
           const reportFile = embeddedZip.file("report.json");
-          console.log("[Auto-detect] report.json found:", !!reportFile);
 
           if (reportFile) {
             const reportContent = await reportFile.async("string");
             const reportData = JSON.parse(reportContent);
-            console.log(
-              "[Auto-detect] Report data keys:",
-              Object.keys(reportData),
-            );
-            console.log(
-              "[Auto-detect] Report data parsed, has suites:",
-              !!reportData.suites,
-            );
-            console.log(
-              "[Auto-detect] Report data parsed, has stats:",
-              !!reportData.stats,
-            );
-
             // Extract metadata
             const metadata = reportData.metadata?.ci || {};
-            console.log("[Auto-detect] CI metadata:", metadata);
 
             // Auto-fill commit if available
             if (metadata.commitHash && !commit) {
@@ -297,30 +261,17 @@ export function UploadDialog() {
               metadata.CI_COMMIT_BRANCH ||
               null;
 
-            console.log(
-              "[Auto-detect] Detected branch from CI metadata:",
-              detectedBranch,
-            );
-
             // If we have PR metadata but no branch, extract from PR title
             if (!detectedBranch && metadata.prTitle) {
               // Try to extract ticket/issue key from PR title (e.g., "WS-2938: Fix something" -> "WS-2938")
               const ticketMatch = metadata.prTitle.match(/^([A-Z]+-\d+)/);
               if (ticketMatch) {
                 detectedBranch = ticketMatch[1];
-                console.log(
-                  "[Auto-detect] Extracted branch from PR title:",
-                  detectedBranch,
-                );
               } else {
                 // If no ticket pattern, use PR number from URL
                 const prMatch = metadata.prHref?.match(/\/pull\/(\d+)$/);
                 if (prMatch) {
                   detectedBranch = `pr-${prMatch[1]}`;
-                  console.log(
-                    "[Auto-detect] Using PR number as branch:",
-                    detectedBranch,
-                  );
                 }
               }
             }
@@ -330,19 +281,12 @@ export function UploadDialog() {
               const branchMatch = metadata.commitHref.match(/\/tree\/([^/]+)/);
               if (branchMatch) {
                 detectedBranch = branchMatch[1];
-                console.log(
-                  "[Auto-detect] Extracted branch from URL:",
-                  detectedBranch,
-                );
               }
             }
 
             // Final fallback to "main" if nothing found
             if (!detectedBranch) {
               detectedBranch = "main";
-              console.log(
-                "[Auto-detect] No branch detected, defaulting to main",
-              );
             }
 
             setBranch(detectedBranch);
@@ -383,19 +327,63 @@ export function UploadDialog() {
             if (detectedEnvironment) setEnvironment(detectedEnvironment);
             if (detectedTrigger) setTrigger(detectedTrigger);
 
-            // Ask server to check for duplicate using optimized ZIP file
+            // Calculate hash from original data BEFORE optimization
+            // Then optimize and send optimized file with pre-calculated hash
             setCheckingDuplicate(true);
             try {
-              // Optimize the ZIP before sending for duplicate check
+              // Calculate content hash from the report data we already extracted
+              const extractTests = (suites: any[]): any[] => {
+                return suites.flatMap((suite) => {
+                  const tests = (suite.specs || []).flatMap((spec: any) =>
+                    (spec.results || []).map((result: any) => ({
+                      name: spec.title,
+                      file: suite.file,
+                      status: result.status,
+                      duration: result.duration,
+                      startTime: result.startTime,
+                    })),
+                  );
+                  // Recursively process nested suites
+                  if (suite.suites && suite.suites.length > 0) {
+                    tests.push(...extractTests(suite.suites));
+                  }
+                  return tests;
+                });
+              };
+
+              const hashContent = {
+                tests: extractTests(reportData.suites || []).sort(
+                  (a: any, b: any) =>
+                    `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
+                ),
+              };
+
+              const hashBuffer = await crypto.subtle.digest(
+                "SHA-256",
+                new TextEncoder().encode(JSON.stringify(hashContent)),
+              );
+              const contentHash = Array.from(new Uint8Array(hashBuffer))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("");
+
+              console.log("[Duplicate Check] Calculated hash:", contentHash);
+
+              // Store hash for later use in upload
+              setCalculatedHash(contentHash);
+
+              // Now optimize the ZIP
               const optimizedBlob = await optimizeZip(zip);
               console.log(
-                "[Duplicate Check] Using optimized ZIP:",
+                "[Duplicate Check] Optimized file:",
                 (optimizedBlob.size / 1024 / 1024).toFixed(2),
-                "MB",
+                "MB (from",
+                (file.size / 1024 / 1024).toFixed(2),
+                "MB)",
               );
 
               const formData = new FormData();
               formData.append("file", optimizedBlob, file.name);
+              formData.append("contentHash", contentHash); // Send pre-calculated hash
               formData.append(
                 "environment",
                 detectedEnvironment || environment,
@@ -414,15 +402,22 @@ export function UploadDialog() {
 
               if (response.ok) {
                 const data = await response.json();
-                if (data.isDuplicate && data.existingRun) {
+                console.log("[Duplicate Check] Response:", data);
+
+                // API returns 'hasDuplicates' not 'isDuplicate'
+                if (data.hasDuplicates && data.existingRun) {
                   setIsDuplicate(true);
                   setDuplicateInfo({
                     timestamp: data.existingRun.timestamp,
                     id: data.existingRun.id,
                   });
+                  console.log(
+                    "[Duplicate Check] Duplicate detected, showing warning",
+                  );
                 } else {
                   setIsDuplicate(false);
                   setDuplicateInfo(null);
+                  console.log("[Duplicate Check] No duplicate found");
                 }
               }
             } catch (error) {
@@ -563,7 +558,7 @@ export function UploadDialog() {
             message: `Successfully uploaded ${data.testRun.total} tests (${data.testRun.passed} passed, ${data.testRun.failed} failed)`,
           });
           // Revalidate all test-runs queries
-          mutate(
+          await mutate(
             (key) =>
               typeof key === "string" && key.startsWith("/api/test-runs"),
           );
@@ -574,26 +569,10 @@ export function UploadDialog() {
       } else {
         // Handle ZIP file upload - optimize first to remove trace files
         setOptimizing(true);
-        console.log(
-          "[Upload] Original file size:",
-          (file.size / 1024 / 1024).toFixed(2),
-          "MB",
-        );
 
         const JSZip = (await import("jszip")).default;
         const zip = await JSZip.loadAsync(file);
         const optimizedBlob = await optimizeZip(zip);
-
-        console.log(
-          "[Upload] Optimized file size:",
-          (optimizedBlob.size / 1024 / 1024).toFixed(2),
-          "MB",
-        );
-        console.log(
-          "[Upload] Saved:",
-          ((file.size - optimizedBlob.size) / 1024 / 1024).toFixed(2),
-          "MB",
-        );
         setOptimizing(false);
 
         const formData = new FormData();
@@ -603,6 +582,11 @@ export function UploadDialog() {
         formData.append("suite", suite);
         formData.append("branch", branch);
         formData.append("commit", commit || "");
+
+        // Send pre-calculated hash if available
+        if (calculatedHash) {
+          formData.append("contentHash", calculatedHash);
+        }
 
         const response = await fetch("/api/upload-zip", {
           method: "POST",
@@ -617,7 +601,7 @@ export function UploadDialog() {
             message: `Successfully uploaded ${data.testRun.total} tests (${data.testRun.passed} passed, ${data.testRun.failed} failed)`,
           });
           // Revalidate all test-runs queries
-          mutate(
+          await mutate(
             (key) =>
               typeof key === "string" && key.startsWith("/api/test-runs"),
           );

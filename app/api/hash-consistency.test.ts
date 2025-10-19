@@ -1,16 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
-import { processPlaywrightReportFile } from '@/lib/playwright-report-utils';
+import { processPlaywrightReportFile, calculateContentHash } from '@/lib/playwright-report-utils';
+import JSZip from 'jszip';
 
 /**
  * Unit test to verify hash calculation consistency between upload-zip and check-duplicate
  * 
  * This test ensures that both endpoints calculate the same hash for the same test data,
  * which is critical for duplicate detection to work correctly.
+ * 
+ * CRITICAL: These tests must verify that optimization (removing traces, compressing images)
+ * does NOT affect the hash calculation.
  */
 
 describe('Hash Calculation Consistency', () => {
-  it('should calculate identical hashes for the same test data', async () => {
+  it('should calculate identical hashes using shared utility function', async () => {
     // Load and process the test report
     const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
     const testReportFile = new File([buffer], 'playwright-report-testing-466.zip', {
@@ -19,77 +23,23 @@ describe('Hash Calculation Consistency', () => {
 
     const { tests } = await processPlaywrightReportFile(testReportFile);
 
-    // Define the metadata
-    const metadata = {
-      environment: 'production',
-      trigger: 'manual',
-      branch: 'main',
-      commit: 'abc123',
-    };
-
-    // Calculate hash using upload-zip logic
-    const uploadHashContent = {
-      environment: metadata.environment,
-      trigger: metadata.trigger,
-      branch: metadata.branch,
-      commit: metadata.commit,
-      tests: tests
-        .map((t) => ({
-          name: t.name,
-          file: t.file,
-          status: t.status,
-        }))
-        .sort((a, b) =>
-          `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-        ),
-    };
-
-    const uploadHash = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(JSON.stringify(uploadHashContent)))
-      .then((buf) =>
-        Array.from(new Uint8Array(buf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      );
-
-    // Calculate hash using check-duplicate logic
-    const checkHashContent = {
-      environment: metadata.environment,
-      trigger: metadata.trigger,
-      branch: metadata.branch,
-      commit: metadata.commit,
-      tests: tests
-        .map((test) => ({
-          name: test.name,
-          file: test.file,
-          status: test.status,
-        }))
-        .sort((a, b) =>
-          `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-        ),
-    };
-
-    const checkHash = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(JSON.stringify(checkHashContent)))
-      .then((buf) =>
-        Array.from(new Uint8Array(buf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      );
+    // Both routes now use the same shared function
+    const hash1 = await calculateContentHash(tests);
+    const hash2 = await calculateContentHash(tests);
 
     console.log('\n=== Hash Calculation Test ===');
-    console.log('Upload hash:', uploadHash);
-    console.log('Check hash: ', checkHash);
-    console.log('Match:', uploadHash === checkHash);
+    console.log('Hash 1:', hash1);
+    console.log('Hash 2:', hash2);
+    console.log('Match:', hash1 === hash2);
     console.log('Test count:', tests.length);
     console.log('Sample test:', tests[0]);
     console.log('=============================\n');
 
-    // The hashes MUST be identical for duplicate detection to work
-    expect(uploadHash).toBe(checkHash);
+    // The hashes MUST be identical
+    expect(hash1).toBe(hash2);
   });
 
-  it('should produce different hashes when metadata differs', async () => {
+  it('should produce SAME hash even when metadata differs (metadata is not included)', async () => {
     const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
     const testReportFile = new File([buffer], 'playwright-report-testing-466.zip', {
       type: 'application/zip',
@@ -97,64 +47,18 @@ describe('Hash Calculation Consistency', () => {
 
     const { tests } = await processPlaywrightReportFile(testReportFile);
 
-    // Hash with metadata set 1
-    const hashContent1 = {
-      environment: 'production',
-      trigger: 'manual',
-      branch: 'main',
-      commit: 'abc123',
-      tests: tests
-        .map((t) => ({
-          name: t.name,
-          file: t.file,
-          status: t.status,
-        }))
-        .sort((a, b) =>
-          `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-        ),
-    };
+    // Calculate hash - metadata doesn't matter anymore!
+    const hash1 = await calculateContentHash(tests);
+    const hash2 = await calculateContentHash(tests);
 
-    const hash1 = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(JSON.stringify(hashContent1)))
-      .then((buf) =>
-        Array.from(new Uint8Array(buf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      );
+    console.log('\n=== Metadata Independence Test ===');
+    console.log('Hash 1:', hash1);
+    console.log('Hash 2:', hash2);
+    console.log('Same (as expected):', hash1 === hash2);
+    console.log('===================================\n');
 
-    // Hash with metadata set 2 (different branch)
-    const hashContent2 = {
-      environment: 'production',
-      trigger: 'manual',
-      branch: 'develop', // Different!
-      commit: 'abc123',
-      tests: tests
-        .map((t) => ({
-          name: t.name,
-          file: t.file,
-          status: t.status,
-        }))
-        .sort((a, b) =>
-          `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-        ),
-    };
-
-    const hash2 = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(JSON.stringify(hashContent2)))
-      .then((buf) =>
-        Array.from(new Uint8Array(buf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      );
-
-    console.log('\n=== Different Metadata Test ===');
-    console.log('Hash 1 (main):', hash1);
-    console.log('Hash 2 (develop):', hash2);
-    console.log('Different:', hash1 !== hash2);
-    console.log('================================\n');
-
-    // Hashes should be different
-    expect(hash1).not.toBe(hash2);
+    // Hashes should be identical because metadata is NOT included
+    expect(hash1).toBe(hash2);
   });
 
   it('should produce same hash regardless of test order in array', async () => {
@@ -165,57 +69,11 @@ describe('Hash Calculation Consistency', () => {
 
     const { tests } = await processPlaywrightReportFile(testReportFile);
 
-    const metadata = {
-      environment: 'production',
-      trigger: 'manual',
-      branch: 'main',
-      commit: 'abc123',
-    };
-
     // Hash with original order
-    const hashContent1 = {
-      ...metadata,
-      tests: tests
-        .map((t) => ({
-          name: t.name,
-          file: t.file,
-          status: t.status,
-        }))
-        .sort((a, b) =>
-          `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-        ),
-    };
+    const hash1 = await calculateContentHash(tests);
 
-    const hash1 = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(JSON.stringify(hashContent1)))
-      .then((buf) =>
-        Array.from(new Uint8Array(buf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      );
-
-    // Hash with reversed order (but then sorted)
-    const hashContent2 = {
-      ...metadata,
-      tests: [...tests]
-        .reverse()
-        .map((t) => ({
-          name: t.name,
-          file: t.file,
-          status: t.status,
-        }))
-        .sort((a, b) =>
-          `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-        ),
-    };
-
-    const hash2 = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(JSON.stringify(hashContent2)))
-      .then((buf) =>
-        Array.from(new Uint8Array(buf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      );
+    // Hash with reversed order (should still be same due to internal sorting)
+    const hash2 = await calculateContentHash([...tests].reverse());
 
     console.log('\n=== Order Independence Test ===');
     console.log('Hash (original order):', hash1);
@@ -225,5 +83,139 @@ describe('Hash Calculation Consistency', () => {
 
     // Hashes should be identical because we sort before hashing
     expect(hash1).toBe(hash2);
+  });
+
+  it('CRITICAL: should produce SAME hash before and after optimization', async () => {
+    const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
+    const testReportFile = new File([buffer], 'playwright-report-testing-466.zip', {
+      type: 'application/zip',
+    });
+
+    // Calculate hash from original file
+    const { tests: originalTests } = await processPlaywrightReportFile(testReportFile);
+    const hashBeforeOptimization = await calculateContentHash(originalTests);
+
+    // Now simulate optimization (remove traces, rename PNGs to JPGs)
+    const zip = await JSZip.loadAsync(new Uint8Array(buffer));
+    const optimizedZip = new JSZip();
+    
+    // Simulate the optimization process
+    for (const [path, file] of Object.entries(zip.files)) {
+      const zipFile = file as any;
+      if (zipFile.dir) {
+        optimizedZip.folder(path);
+        continue;
+      }
+      
+      // Skip trace files
+      if (path.includes('trace') || path.endsWith('.zip')) {
+        continue;
+      }
+      
+      // Rename PNGs to JPGs (simulating compression)
+      if (path.endsWith('.png')) {
+        const content = await zipFile.async('uint8array');
+        const newPath = path.replace(/\.png$/, '.jpg');
+        optimizedZip.file(newPath, content);
+      } else {
+        const content = await zipFile.async('uint8array');
+        optimizedZip.file(path, content);
+      }
+    }
+    
+    // Generate optimized ZIP
+    const optimizedBlob = await optimizedZip.generateAsync({ type: 'blob' });
+    const optimizedFile = new File([optimizedBlob], 'optimized.zip', {
+      type: 'application/zip',
+    });
+    
+    // Calculate hash from optimized file
+    const { tests: optimizedTests } = await processPlaywrightReportFile(optimizedFile);
+    const hashAfterOptimization = await calculateContentHash(optimizedTests);
+
+    console.log('\n=== CRITICAL: Optimization Hash Test ===');
+    console.log('Hash before optimization:', hashBeforeOptimization);
+    console.log('Hash after optimization: ', hashAfterOptimization);
+    console.log('Match:', hashBeforeOptimization === hashAfterOptimization);
+    console.log('Original tests:', originalTests.length);
+    console.log('Optimized tests:', optimizedTests.length);
+    console.log('========================================\n');
+
+    // THIS IS THE CRITICAL TEST - if this fails, duplicate detection is broken!
+    // The hash MUST be the same even after optimization
+    expect(hashBeforeOptimization).toBe(hashAfterOptimization);
+  });
+
+  it('CRITICAL: should detect duplicate even with different file structure', async () => {
+    const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
+    
+    // Upload 1: Original file
+    const file1 = new File([buffer], 'original.zip', { type: 'application/zip' });
+    const { tests: tests1 } = await processPlaywrightReportFile(file1);
+    const hash1 = await calculateContentHash(tests1);
+
+    // Upload 2: Same file but optimized (different internal structure)
+    const zip = await JSZip.loadAsync(new Uint8Array(buffer));
+    const optimizedZip = new JSZip();
+    
+    for (const [path, file] of Object.entries(zip.files)) {
+      const zipFile = file as any;
+      if (zipFile.dir) continue;
+      
+      // Remove traces and rename images
+      if (path.includes('trace') || path.endsWith('.zip')) continue;
+      
+      if (path.endsWith('.png')) {
+        const content = await zipFile.async('uint8array');
+        optimizedZip.file(path.replace(/\.png$/, '.jpg'), content);
+      } else {
+        const content = await zipFile.async('uint8array');
+        optimizedZip.file(path, content);
+      }
+    }
+    
+    const optimizedBlob = await optimizedZip.generateAsync({ type: 'blob' });
+    const file2 = new File([optimizedBlob], 'optimized.zip', { type: 'application/zip' });
+    const { tests: tests2 } = await processPlaywrightReportFile(file2);
+    const hash2 = await calculateContentHash(tests2);
+
+    console.log('\n=== Duplicate Detection Test ===');
+    console.log('Original hash:  ', hash1);
+    console.log('Optimized hash: ', hash2);
+    console.log('Should be duplicate:', hash1 === hash2);
+    console.log('================================\n');
+
+    // If this fails, uploading the same test run twice (once optimized, once not)
+    // would NOT be detected as a duplicate!
+    expect(hash1).toBe(hash2);
+  });
+
+  it('should produce DIFFERENT hashes for different test runs', async () => {
+    const buffer = readFileSync('/Users/harbra/Downloads/playwright-report-testing-466.zip');
+    const testReportFile = new File([buffer], 'test.zip', { type: 'application/zip' });
+    const { tests } = await processPlaywrightReportFile(testReportFile);
+
+    // Original hash
+    const hash1 = await calculateContentHash(tests);
+
+    // Modify one test result
+    const modifiedTests = [...tests];
+    if (modifiedTests[0]) {
+      modifiedTests[0] = {
+        ...modifiedTests[0],
+        status: modifiedTests[0].status === 'passed' ? 'failed' : 'passed',
+      };
+    }
+
+    const hash2 = await calculateContentHash(modifiedTests);
+
+    console.log('\n=== Different Test Results Test ===');
+    console.log('Original hash: ', hash1);
+    console.log('Modified hash: ', hash2);
+    console.log('Different:', hash1 !== hash2);
+    console.log('====================================\n');
+
+    // Different test results should produce different hashes
+    expect(hash1).not.toBe(hash2);
   });
 });

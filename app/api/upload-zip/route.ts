@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
+import { calculateContentHash } from "@/lib/playwright-report-utils";
 
 interface PlaywrightTest {
   testId: string;
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
     const suite = formData.get("suite") as string;
     let branch = formData.get("branch") as string;
     const commit = formData.get("commit") as string;
+    const preCalculatedHash = formData.get("contentHash") as string | null;
 
     if (!file || !environment || !trigger || !suite) {
       return NextResponse.json(
@@ -492,6 +494,9 @@ export async function POST(request: NextRequest) {
     );
 
     console.log("[v0] Found screenshots:", screenshotFiles.length);
+    if (screenshotFiles.length > 0) {
+      console.log("[v0] Screenshot files sample:", screenshotFiles.slice(0, 5));
+    }
 
     const screenshotUrls: Record<string, string> = {};
 
@@ -500,6 +505,11 @@ export async function POST(request: NextRequest) {
       const screenshotFile = zip.file(screenshotPath);
       if (screenshotFile) {
         const screenshotBuffer = await screenshotFile.async("nodebuffer");
+        
+        // Determine content type based on file extension
+        const contentType = screenshotPath.endsWith('.jpg') || screenshotPath.endsWith('.jpeg')
+          ? 'image/jpeg'
+          : 'image/png';
 
         // Check if Supabase Storage is configured
         if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -525,7 +535,7 @@ export async function POST(request: NextRequest) {
             const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
               .from('test-screenshots')
               .upload(storagePath, screenshotBuffer, {
-                contentType: 'image/png',
+                contentType,
                 cacheControl: '3600',
                 upsert: false,
               });
@@ -550,7 +560,7 @@ export async function POST(request: NextRequest) {
             console.error("[v0] Failed to upload to Supabase Storage:", error);
             // Fall back to base64 encoding
             const base64 = screenshotBuffer.toString("base64");
-            screenshotUrls[screenshotPath] = `data:image/png;base64,${base64}`;
+            screenshotUrls[screenshotPath] = `data:${contentType};base64,${base64}`;
           }
         } else {
           console.log(
@@ -558,21 +568,36 @@ export async function POST(request: NextRequest) {
           );
           // Convert to base64 for inline display
           const base64 = screenshotBuffer.toString("base64");
-          screenshotUrls[screenshotPath] = `data:image/png;base64,${base64}`;
+          screenshotUrls[screenshotPath] = `data:${contentType};base64,${base64}`;
         }
       }
     }
 
     for (const test of tests) {
+      const originalScreenshotCount = test.screenshots.length;
       test.screenshots = test.screenshots
-        .map((path) => screenshotUrls[path])
+        .map((path) => {
+          // Try original path first, then try with .jpg extension (for compressed images)
+          const url = screenshotUrls[path] || screenshotUrls[path.replace(/\.png$/, '.jpg')];
+          if (!url) {
+            console.warn(`[v0] Screenshot not found: ${path} (tried .jpg variant too)`);
+          }
+          return url;
+        })
         .filter(Boolean);
+      
+      if (originalScreenshotCount > 0 && test.screenshots.length === 0) {
+        console.error(`[v0] Test "${test.name}" lost all ${originalScreenshotCount} screenshots!`);
+      }
 
       // Also map retry result screenshots
       if (test.retryResults) {
         for (const retry of test.retryResults) {
           retry.screenshots = retry.screenshots
-            .map((path) => screenshotUrls[path])
+            .map((path) => {
+              // Try original path first, then try with .jpg extension (for compressed images)
+              return screenshotUrls[path] || screenshotUrls[path.replace(/\.png$/, '.jpg')];
+            })
             .filter(Boolean);
         }
       }
@@ -604,30 +629,17 @@ export async function POST(request: NextRequest) {
     const durationMinutes = Math.floor(totalDuration / 60000);
     const durationSeconds = Math.floor((totalDuration % 60000) / 1000);
 
-    // Generate content hash for duplicate detection
-    // Hash includes: metadata + test names/statuses/files (not timestamps or durations)
-    const hashContent = {
-      environment,
-      trigger,
-      branch,
-      commit: commit || "unknown",
-      tests: tests
-        .map((t) => ({
-          name: t.name,
-          file: t.file,
-          status: t.status,
-        }))
-        .sort((a, b) =>
-          `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-        ),
-    };
-    const contentHash = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(JSON.stringify(hashContent)))
-      .then((buf) =>
-        Array.from(new Uint8Array(buf))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join(""),
-      );
+    // Use pre-calculated hash if available (from optimized upload flow)
+    // Otherwise calculate from tests
+    const contentHash = preCalculatedHash 
+      ? preCalculatedHash 
+      : await calculateContentHash(tests);
+    
+    if (preCalculatedHash) {
+      console.log("[Upload] Using pre-calculated hash:", preCalculatedHash);
+    } else {
+      console.log("[Upload] Calculated hash from tests:", contentHash);
+    }
 
     const testRun = {
       id: crypto.randomUUID(),

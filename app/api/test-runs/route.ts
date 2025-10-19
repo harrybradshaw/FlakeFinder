@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
+    const project = searchParams.get("project")
     const environment = searchParams.get("environment")
     const trigger = searchParams.get("trigger")
     const timeRange = searchParams.get("timeRange") || "7d"
@@ -13,8 +15,52 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ runs: [] })
     }
 
+    // Get user authentication
+    const { userId } = await auth()
+    
+    if (!userId) {
+      console.log("[API] User not authenticated, returning empty array")
+      return NextResponse.json({ runs: [] })
+    }
+
     const { createClient } = await import("@supabase/supabase-js")
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+
+    // Get user's organization memberships from Clerk
+    const { clerkClient } = await import("@clerk/nextjs/server")
+    const client = await clerkClient()
+    const orgMemberships = await client.users.getOrganizationMembershipList({
+      userId: userId,
+    })
+    
+    const userOrgIds = orgMemberships.data.map((membership) => membership.organization.id)
+    
+    if (userOrgIds.length === 0) {
+      console.log("[API] User has no organization memberships")
+      return NextResponse.json({ runs: [] })
+    }
+
+    // Get accessible project IDs based on user's organizations
+    const { data: orgProjects, error: orgProjectsError } = await supabase
+      .from("organization_projects")
+      .select("project_id, organization_id")
+      .in("organization_id", userOrgIds)
+
+    console.log("[API] Organization projects query result:", { data: orgProjects, error: orgProjectsError, userOrgIds })
+
+    if (orgProjectsError) {
+      console.error("[API] Error fetching organization projects:", orgProjectsError)
+      return NextResponse.json({ error: orgProjectsError.message }, { status: 500 })
+    }
+
+    const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || []
+    
+    console.log("[API] Accessible project IDs:", accessibleProjectIds)
+    
+    if (accessibleProjectIds.length === 0) {
+      console.log("[API] User has no accessible projects")
+      return NextResponse.json({ runs: [] })
+    }
 
     // Calculate time range
     const now = new Date()
@@ -36,9 +82,21 @@ export async function GET(request: NextRequest) {
         startDate.setDate(now.getDate() - 7)
     }
 
-    // Look up environment/trigger IDs if filters are provided
+    // Look up project/environment/trigger IDs if filters are provided
+    let projectId = null
     let environmentId = null
     let triggerId = null
+
+    if (project && project !== "all") {
+      const { data: projData } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("name", project)
+        .eq("active", true)
+        .single()
+      
+      if (projData) projectId = projData.id
+    }
 
     if (environment && environment !== "all") {
       const { data: envData } = await supabase
@@ -62,17 +120,27 @@ export async function GET(request: NextRequest) {
       if (trigData) triggerId = trigData.id
     }
 
-    // Fetch test runs from database with filters (join with environments and triggers)
+    // Fetch test runs from database with filters (join with projects, environments and triggers)
     let query = supabase
       .from("test_runs")
       .select(`
         *,
+        project:projects(name, display_name, color),
         environment:environments(name, display_name, color),
         trigger:test_triggers(name, display_name, icon)
       `)
+      .in("project_id", accessibleProjectIds) // Only show test runs for accessible projects
       .order("timestamp", { ascending: false })
 
     // Apply filters by ID
+    if (projectId) {
+      // Verify the requested project is accessible
+      if (!accessibleProjectIds.includes(projectId)) {
+        console.log("[API] User attempting to access unauthorized project")
+        return NextResponse.json({ runs: [] })
+      }
+      query = query.eq("project_id", projectId)
+    }
     if (environmentId) {
       query = query.eq("environment_id", environmentId)
     }
@@ -99,6 +167,9 @@ export async function GET(request: NextRequest) {
     const runs = (data || []).map((run: any) => ({
       id: run.id,
       timestamp: run.timestamp,
+      project: run.project?.name || 'default',
+      project_display: run.project?.display_name || 'Default Project',
+      project_color: run.project?.color || '#3b82f6',
       environment: run.environment?.name || 'unknown',
       environment_display: run.environment?.display_name || 'Unknown',
       environment_color: run.environment?.color || '#3b82f6',
@@ -113,6 +184,7 @@ export async function GET(request: NextRequest) {
       flaky: run.flaky,
       skipped: run.skipped,
       duration: formatDuration(run.duration),
+      uploaded_filename: run.uploaded_filename,
     }))
 
     return NextResponse.json({ runs })

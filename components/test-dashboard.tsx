@@ -2,14 +2,12 @@
 
 import { useState, useMemo } from "react"
 import useSWR from "swr"
-import Link from "next/link"
+import useSWRImmutable from "swr/immutable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
 import { TestRunsList } from "@/components/test-runs-list"
 import { TrendsChart } from "@/components/trends-chart"
 import { TestStats } from "@/components/test-stats"
-import { UploadDialog } from "@/components/upload-dialog"
 import type { TestRun } from "@/lib/mock-data"
 
 const fetcher = async (url: string) => {
@@ -33,8 +31,12 @@ export function TestDashboard() {
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("7d")
   
   // Fetch environments and triggers dynamically
-  const { data: environmentsData } = useSWR("/api/environments", configFetcher)
-  const { data: triggersData } = useSWR("/api/triggers", configFetcher)
+  const { data: environmentsData } = useSWRImmutable("/api/environments", configFetcher, {
+    revalidateOnFocus: false,
+})
+  const { data: triggersData } = useSWR("/api/triggers", configFetcher, {
+    revalidateOnFocus: false,
+})
   
   const environments = environmentsData?.environments || []
   const triggers = triggersData?.triggers || []
@@ -57,8 +59,7 @@ export function TestDashboard() {
 
   // Fetch data with SWR
   const { data: testRuns, error, isLoading } = useSWR<TestRun[]>(apiUrl, fetcher, {
-    refreshInterval: 30000, // Auto-refresh every 30 seconds
-    revalidateOnFocus: true,
+    revalidateOnFocus: false,
   })
 
   const stats = {
@@ -70,23 +71,6 @@ export function TestDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-foreground">Playwright Test Reports</h1>
-              <p className="text-sm text-muted-foreground">Monitor your test results and trends</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link href="/tests">
-                <Button variant="outline">Test Health</Button>
-              </Link>
-              <UploadDialog />
-            </div>
-          </div>
-        </div>
-      </header>
-
       <main className="container mx-auto px-4 py-6">
         <div className="mb-6 flex items-center gap-4">
           <Select value={selectedEnvironment} onValueChange={setSelectedEnvironment}>

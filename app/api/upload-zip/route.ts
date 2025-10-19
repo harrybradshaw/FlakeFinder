@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File
+    const project = formData.get("project") as string
     const environment = formData.get("environment") as string
     const trigger = formData.get("trigger") as string
     const branch = formData.get("branch") as string
@@ -103,6 +104,8 @@ export async function POST(request: NextRequest) {
       status: "passed" | "failed" | "flaky" | "skipped" | "timedOut"
       duration: number
       file: string
+      worker_index?: number
+      started_at?: string
       error?: string
       screenshots: string[]
       retryResults?: Array<{
@@ -247,6 +250,7 @@ export async function POST(request: NextRequest) {
                   
                   const lastResult = test.results?.[test.results.length - 1]
                   if (lastResult) {
+                    console.log(`[v0] Test "${test.title}" - workerIndex:`, lastResult.workerIndex, "startTime:", lastResult.startTime)
                     const screenshots: string[] = []
                     
                     // Extract screenshot paths from final attempt
@@ -267,9 +271,11 @@ export async function POST(request: NextRequest) {
                     tests.push({
                       id: test.testId,
                       name: test.title,
-                      status: test.outcome === "expected" ? lastResult.status : test.outcome === "flaky" ? "flaky" : "failed",
+                      status: lastResult.status === "skipped" ? "skipped" : test.outcome === "expected" ? lastResult.status : test.outcome === "flaky" ? "flaky" : "failed",
                       duration: lastResult.duration || 0,
                       file: test.location?.file || testFile.fileName || "unknown",
+                      worker_index: lastResult.workerIndex,
+                      started_at: lastResult.startTime,
                       error: finalError,
                       screenshots,
                       retryResults,
@@ -314,7 +320,7 @@ export async function POST(request: NextRequest) {
               tests.push({
                 id: spec.testId,
                 name: spec.title,
-                status: spec.outcome === "expected" ? result.status : spec.outcome === "flaky" ? "flaky" : "failed",
+                status: result.status === "skipped" ? "skipped" : spec.outcome === "expected" ? result.status : spec.outcome === "flaky" ? "flaky" : "failed",
                 duration: result.duration,
                 file: spec.location.file,
                 error: result.error?.message,
@@ -387,7 +393,7 @@ export async function POST(request: NextRequest) {
     }
 
     const stats = {
-      total: tests.length,
+      total: tests.filter((t) => t.status !== "skipped").length, // Only count tests that were actually run
       passed: tests.filter((t) => t.status === "passed").length,
       failed: tests.filter((t) => t.status === "failed").length,
       flaky: tests.filter((t) => t.status === "flaky").length,
@@ -434,6 +440,66 @@ export async function POST(request: NextRequest) {
         const { createClient } = await import("@supabase/supabase-js")
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
+        // Verify user authentication (Clerk middleware ensures this, but double-check)
+        const { auth } = await import("@clerk/nextjs/server")
+        const { userId } = await auth()
+        
+        if (!userId) {
+          return NextResponse.json(
+            { error: "User not authenticated" },
+            { status: 401 }
+          )
+        }
+
+        // Look up project ID (default to 'default' project if not specified)
+        const projectName = project || 'default'
+        const { data: projectData, error: projectError } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("name", projectName)
+          .eq("active", true)
+          .single()
+
+        if (projectError || !projectData) {
+          console.error("[v0] Project not found:", projectName, projectError)
+          return NextResponse.json(
+            { error: `Project '${projectName}' not found. Please add it to the database first.` },
+            { status: 400 }
+          )
+        }
+
+        // Verify user's organization has access to this project
+        const { clerkClient } = await import("@clerk/nextjs/server")
+        const client = await clerkClient()
+        const orgMemberships = await client.users.getOrganizationMembershipList({
+          userId: userId,
+        })
+        
+        const userOrgIds = orgMemberships.data.map((membership) => membership.organization.id)
+        
+        if (userOrgIds.length === 0) {
+          return NextResponse.json(
+            { error: "User must be a member of an organization to upload test results" },
+            { status: 403 }
+          )
+        }
+
+        // Check if any of user's organizations have access to this project
+        const { data: orgProjectAccess } = await supabase
+          .from("organization_projects")
+          .select("organization_id")
+          .eq("project_id", projectData.id)
+          .in("organization_id", userOrgIds)
+          .limit(1)
+
+        if (!orgProjectAccess || orgProjectAccess.length === 0) {
+          console.error("[v0] User's organizations do not have access to project:", projectName)
+          return NextResponse.json(
+            { error: `You do not have access to upload to project '${projectName}'. Contact your administrator to grant access.` },
+            { status: 403 }
+          )
+        }
+
         // Look up environment and trigger IDs
         const { data: environmentData, error: envError } = await supabase
           .from("environments")
@@ -465,6 +531,7 @@ export async function POST(request: NextRequest) {
           )
         }
 
+        const projectId = projectData.id
         const environmentId = environmentData.id
         const triggerId = triggerData.id
 
@@ -498,6 +565,7 @@ export async function POST(request: NextRequest) {
         const { data: runData, error: runError } = await supabase
             .from("test_runs")
             .insert({
+              project_id: projectId,
               environment_id: environmentId,
               trigger_id: triggerId,
               branch,
@@ -511,6 +579,7 @@ export async function POST(request: NextRequest) {
               timestamp: testRun.timestamp,
               ci_metadata: ciMetadata,
               content_hash: contentHash,
+              uploaded_filename: file.name,
             })
             .select()
             .single()
@@ -521,15 +590,21 @@ export async function POST(request: NextRequest) {
           console.log("[v0] Inserted test run:", runData)
 
           // Insert individual tests
-          const testsToInsert = tests.map((test) => ({
-            test_run_id: runData.id,
-            name: test.name,
-            status: test.status,
-            duration: test.duration,
-            file: test.file,
-            error: test.error,
-            screenshots: test.screenshots,
-          }))
+          const testsToInsert = tests.map((test) => {
+            const startedAt = test.started_at ? new Date(test.started_at).toISOString() : null
+            console.log(`[v0] Inserting test "${test.name}" - started_at:`, startedAt)
+            return {
+              test_run_id: runData.id,
+              name: test.name,
+              status: test.status,
+              duration: test.duration,
+              file: test.file,
+              worker_index: test.worker_index,
+              started_at: startedAt,
+              error: test.error,
+              screenshots: test.screenshots,
+            }
+          })
 
           const { data: insertedTests, error: testsError } = await supabase
             .from("tests")

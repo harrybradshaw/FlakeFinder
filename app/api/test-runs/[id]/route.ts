@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
 export async function GET(
   request: NextRequest,
@@ -12,14 +13,55 @@ export async function GET(
       return NextResponse.json({ error: "Database not configured" }, { status: 500 })
     }
 
+    // Get user authentication
+    const { userId } = await auth()
+    
+    if (!userId) {
+      console.log("[API] User not authenticated")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const { createClient } = await import("@supabase/supabase-js")
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
-    // Fetch test run with joined environment and trigger
+    // Get user's organization memberships from Clerk
+    const { clerkClient } = await import("@clerk/nextjs/server")
+    const client = await clerkClient()
+    const orgMemberships = await client.users.getOrganizationMembershipList({
+      userId: userId,
+    })
+    
+    const userOrgIds = orgMemberships.data.map((membership) => membership.organization.id)
+    
+    if (userOrgIds.length === 0) {
+      console.log("[API] User has no organization memberships")
+      return NextResponse.json({ error: "No accessible organizations" }, { status: 403 })
+    }
+
+    // Get accessible project IDs based on user's organizations
+    const { data: orgProjects, error: orgProjectsError } = await supabase
+      .from("organization_projects")
+      .select("project_id, organization_id")
+      .in("organization_id", userOrgIds)
+
+    if (orgProjectsError) {
+      console.error("[API] Error fetching organization projects:", orgProjectsError)
+      return NextResponse.json({ error: orgProjectsError.message }, { status: 500 })
+    }
+
+    const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || []
+    
+    if (accessibleProjectIds.length === 0) {
+      console.log("[API] User has no accessible projects")
+      return NextResponse.json({ error: "No accessible projects" }, { status: 403 })
+    }
+
+    // Fetch test run with joined project, environment and trigger
     const { data: testRun, error: runError } = await supabase
       .from("test_runs")
       .select(`
         *,
+        project:projects(name, display_name, color),
         environment:environments(name, display_name, color),
         trigger:test_triggers(name, display_name, icon)
       `)
@@ -32,6 +74,12 @@ export async function GET(
         return NextResponse.json({ error: "Test run not found" }, { status: 404 })
       }
       return NextResponse.json({ error: runError.message }, { status: 500 })
+    }
+
+    // Verify user has access to this test run's project
+    if (!accessibleProjectIds.includes(testRun.project_id)) {
+      console.log("[API] User attempting to access unauthorized test run")
+      return NextResponse.json({ error: "Test run not found" }, { status: 404 })
     }
 
     // Fetch associated tests
@@ -86,6 +134,9 @@ export async function GET(
     const response = {
       id: testRun.id,
       timestamp: testRun.timestamp,
+      project: (testRun as any).project?.name || 'default',
+      project_display: (testRun as any).project?.display_name || 'Default Project',
+      project_color: (testRun as any).project?.color || '#3b82f6',
       environment: (testRun as any).environment?.name || 'unknown',
       environment_display: (testRun as any).environment?.display_name || 'Unknown',
       environment_color: (testRun as any).environment?.color || '#3b82f6',
@@ -107,12 +158,14 @@ export async function GET(
         status: test.status,
         duration: test.duration,
         file: test.file,
+        worker_index: test.worker_index,
+        started_at: test.started_at,
         error: test.error,
         screenshots: test.screenshots || [],
         retryResults: retryResultsByTestId.get(test.id) || [],
       })),
     }
-
+    
     return NextResponse.json(response)
   } catch (error) {
     console.error("[API] Error fetching test run:", error)

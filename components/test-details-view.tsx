@@ -6,12 +6,15 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft, CheckCircle2, XCircle, Clock, AlertTriangle, FileText, ImageIcon, Filter, ArrowUpDown, ExternalLink, GitCommit, GitBranch } from "lucide-react"
 import Link from "next/link"
 import type { TestRun } from "@/lib/mock-data"
 import Image from "next/image"
+import { TimelineView } from "@/components/timeline-view"
 
 interface TestCase {
+  id?: string
   name: string
   file: string
   status: "passed" | "failed" | "flaky" | "skipped"
@@ -30,6 +33,10 @@ interface TestCase {
     attachments?: Array<{name: string, contentType: string, content: string}>
     startTime?: string
   }>
+  // Raw data for timeline
+  worker_index?: number | null
+  started_at?: string | null
+  durationMs?: number
 }
 
 interface TestDetailsViewProps {
@@ -46,6 +53,8 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
   const passRate = ((testRun.passed / testRun.total) * 100).toFixed(1)
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [sortBy, setSortBy] = useState<string>("status")
+  const [activeTab, setActiveTab] = useState<string>("tests")
+  const [expandedTestId, setExpandedTestId] = useState<string | null>(null)
 
   // Use real test cases if available, otherwise generate mock ones
   const allTestCases: TestCase[] = testRun.tests && testRun.tests.length > 0
@@ -61,28 +70,8 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
           startTime: retry.started_at || retry.startTime,
         })) || []
         
-        // Debug logging
-        if (test.status === "flaky" || test.status === "failed" || retries.length > 0) {
-          console.log(`[TestDetails] Test "${test.name}":`, {
-            status: test.status,
-            retryCount: retries.length,
-            retries: retries,
-            hasError: !!test.error,
-            hasRetryResults: !!test.retryResults,
-          })
-          if (retries.length > 0) {
-            retries.forEach((retry, idx) => {
-              console.log(`  Retry ${idx}:`, {
-                status: retry.status,
-                hasError: !!retry.error,
-                hasErrorStack: !!retry.errorStack,
-                errorPreview: retry.error?.substring(0, 50),
-              })
-            })
-          }
-        }
-        
         return {
+          id: test.id,
           name: test.name,
           file: test.file,
           status: test.status === "timedOut" ? "failed" : (test.status as "passed" | "failed" | "flaky" | "skipped"),
@@ -93,6 +82,10 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
             url,
           })),
           retryResults: retries,
+          // Raw data for timeline
+          worker_index: test.worker_index,
+          started_at: test.started_at,
+          durationMs: test.duration, // Keep original number for timeline
         }
       })
     : generateMockTestCases(testRun)
@@ -137,7 +130,24 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <h1 className="text-2xl font-semibold text-foreground">{testRun.branch}</h1>
-                <Badge variant="outline">{testRun.environment}</Badge>
+                {testRun.project_display && testRun.project_display !== 'Default Project' && (
+                  <Badge 
+                    variant="outline"
+                    style={{ 
+                      borderColor: testRun.project_color || '#3b82f6',
+                      color: testRun.project_color || '#3b82f6'
+                    }}
+                  >
+                    {testRun.project_display}
+                  </Badge>
+                )}
+                <Badge variant="outline">{testRun.environment_display || testRun.environment}</Badge>
+                {testRun.trigger_display && (
+                  <Badge variant="secondary">
+                    {testRun.trigger_icon && <span className="mr-1">{testRun.trigger_icon}</span>}
+                    {testRun.trigger_display}
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span>{testRun.timestamp}</span>
@@ -234,43 +244,60 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
           </Card>
         </div>
 
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold">Test Cases ({testCases.length})</h2>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Filter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Tests</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                    <SelectItem value="flaky">Flaky</SelectItem>
-                    <SelectItem value="passed">Passed</SelectItem>
-                    <SelectItem value="skipped">Skipped</SelectItem>
-                  </SelectContent>
-                </Select>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="tests">Test Cases</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="tests">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold">Test Cases ({testCases.length})</h2>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-muted-foreground" />
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Filter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tests</SelectItem>
+                        <SelectItem value="failed">Failed</SelectItem>
+                        <SelectItem value="flaky">Flaky</SelectItem>
+                        <SelectItem value="passed">Passed</SelectItem>
+                        <SelectItem value="skipped">Skipped</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+                    <Select value={sortBy} onValueChange={setSortBy}>
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Sort" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="status">Status</SelectItem>
+                        <SelectItem value="name">Name</SelectItem>
+                        <SelectItem value="duration">Duration</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-                <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Sort" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="status">Status</SelectItem>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="duration">Duration</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <Accordion type="single" collapsible className="w-full">
+              <Accordion 
+            type="single" 
+            collapsible 
+            className="w-full"
+            value={expandedTestId || undefined}
+            onValueChange={setExpandedTestId}
+          >
             {testCases.map((testCase, index) => (
-              <AccordionItem key={index} value={`test-${index}`}>
+              <AccordionItem 
+                key={testCase.id || index} 
+                value={testCase.id || `test-${index}`}
+                id={`test-${testCase.id || index}`}
+              >
                 <AccordionTrigger className="hover:no-underline">
                   <div className="flex items-center gap-3 flex-1 text-left">
                     {testCase.status === "passed" && <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />}
@@ -455,7 +482,65 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
               </AccordionItem>
             ))}
           </Accordion>
-        </Card>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="timeline">
+            <TimelineView 
+              tests={(() => {
+                // Flatten tests to include each retry as a separate entry
+                const flatTests: any[] = []
+                allTestCases.forEach(test => {
+                  if (test.retryResults && test.retryResults.length > 0) {
+                    // For each retry, create a timeline entry
+                    test.retryResults.forEach((retry, idx) => {
+                      if (retry.startTime && retry.duration) {
+                        flatTests.push({
+                          id: `${test.id}-retry-${idx}`,
+                          name: `${test.name} ${retry.retryIndex > 0 ? `(Retry ${retry.retryIndex})` : '(Attempt 1)'}`,
+                          file: test.file,
+                          status: retry.status,
+                          started_at: retry.startTime,
+                          durationMs: retry.duration,
+                          worker_index: test.worker_index,
+                          originalTestId: test.id,
+                        })
+                      }
+                    })
+                  } else if (test.started_at && test.durationMs) {
+                    // No retries, use the test's own timing
+                    flatTests.push({
+                      id: test.id,
+                      name: test.name,
+                      file: test.file,
+                      status: test.status,
+                      started_at: test.started_at,
+                      durationMs: test.durationMs,
+                      worker_index: test.worker_index,
+                      originalTestId: test.id,
+                    })
+                  }
+                })
+                return flatTests
+              })()} 
+              onTestSelect={(testId) => {
+                // Extract original test ID (remove -retry-N suffix)
+                const originalId = testId.includes('-retry-') 
+                  ? testId.split('-retry-')[0] 
+                  : testId
+                setActiveTab("tests")
+                setExpandedTestId(originalId)
+                // Scroll to the test after a short delay to allow tab switch
+                setTimeout(() => {
+                  const element = document.getElementById(`test-${originalId}`)
+                  if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }
+                }, 100)
+              }}
+            />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   )

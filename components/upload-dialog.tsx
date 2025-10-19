@@ -2,8 +2,9 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useSWRConfig } from "swr"
+import useSWRImmutable from "swr/immutable";
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,8 +46,8 @@ export function UploadDialog() {
   const [checkingDuplicate, setCheckingDuplicate] = useState(false)
   
   // Fetch environments and triggers dynamically
-  const { data: environmentsData } = useSWR("/api/environments", fetcher)
-  const { data: triggersData } = useSWR("/api/triggers", fetcher)
+  const { data: environmentsData } = useSWRImmutable("/api/environments", fetcher)
+  const { data: triggersData } = useSWRImmutable("/api/triggers", fetcher)
   
   const environments = environmentsData?.environments || []
   const triggers = triggersData?.triggers || []

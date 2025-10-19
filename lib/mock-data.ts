@@ -1,8 +1,15 @@
 export interface TestRun {
   id: string
   timestamp: string
-  environment: "production" | "staging" | "development"
-  trigger: "ci" | "pull_request" | "merge_queue" | "post_deploy"
+  project?: string
+  project_display?: string
+  project_color?: string
+  environment: string
+  environment_display?: string
+  environment_color?: string
+  trigger: string
+  trigger_display?: string
+  trigger_icon?: string
   branch: string
   commit: string
   total: number
@@ -12,12 +19,16 @@ export interface TestRun {
   skipped?: number
   duration: string
   hasScreenshots?: boolean
+  uploaded_filename?: string
+  ci_metadata?: Record<string, any>
   tests?: Array<{
     id: string
     name: string
     status: "passed" | "failed" | "flaky" | "skipped" | "timedOut"
     duration: number
     file: string
+    worker_index?: number
+    started_at?: string
     error?: string
     screenshots?: string[]
     retryResults?: Array<{

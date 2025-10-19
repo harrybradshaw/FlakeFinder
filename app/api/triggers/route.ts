@@ -1,7 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
 export async function GET(request: NextRequest) {
   try {
+    // Verify authentication (middleware enforces this, but good practice to check)
+    const { userId } = await auth()
+    
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       return NextResponse.json({ triggers: [] })
     }

@@ -45,8 +45,12 @@ export default function TestsPage() {
   const [sortBy, setSortBy] = useState<string>("health")
   
   // Fetch environments and triggers dynamically
-  const { data: environmentsData } = useSWR("/api/environments", configFetcher)
-  const { data: triggersData } = useSWR("/api/triggers", configFetcher)
+  const { data: environmentsData } = useSWR("/api/environments", configFetcher, {
+    revalidateOnFocus: false,
+})
+  const { data: triggersData } = useSWR("/api/triggers", configFetcher, {
+    revalidateOnFocus: false,
+})
   
   const environments = environmentsData?.environments || []
   const triggers = triggersData?.triggers || []
@@ -68,7 +72,6 @@ export default function TestsPage() {
   }, [selectedEnvironment, selectedTrigger, selectedTimeRange])
 
   const { data: tests, error, isLoading } = useSWR<TestMetric[]>(apiUrl, fetcher, {
-    refreshInterval: 60000,
     revalidateOnFocus: false,
   })
 
@@ -221,7 +224,7 @@ export default function TestsPage() {
               Showing {filteredTests.length} test{filteredTests.length !== 1 ? "s" : ""}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 flex flex-col">
               {filteredTests.map((test, idx) => {
                 // Create URL-safe test identifier
                 const testId = Buffer.from(`${test.name}::${test.file}`).toString("base64")

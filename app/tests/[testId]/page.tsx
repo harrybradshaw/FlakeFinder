@@ -11,6 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,8 +25,10 @@ import {
   XCircle,
   AlertTriangle,
   Clock,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
+import { TestCaseDetails } from "@/components/test-case-details";
 import {
   LineChart,
   Line,
@@ -62,6 +70,58 @@ const fetcher = async (url: string) => {
   }
   return response.json();
 };
+
+// Component to lazy-load specific test details from a run
+function TestRunDetails({
+  testRunId,
+  suiteTestId,
+}: {
+  testRunId: string;
+  suiteTestId: string;
+}) {
+  const { data, error, isLoading } = useSWR(
+    `/api/test-runs/${testRunId}/tests/${suiteTestId}`,
+    fetcher,
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">
+          Loading test details...
+        </span>
+      </div>
+    );
+  }
+
+  if (error || !data?.test) {
+    return (
+      <div className="py-4 text-center text-sm text-destructive">
+        Failed to load test details
+      </div>
+    );
+  }
+
+  const testCase = data.test;
+
+  // Transform to match TestCaseDetails interface
+  const testCaseForDetails = {
+    id: testCase.id,
+    name: testCase.name,
+    file: testCase.file,
+    status: testCase.status === "timedOut" ? "failed" : testCase.status,
+    duration: `${(testCase.duration / 1000).toFixed(2)}s`,
+    error: testCase.error,
+    screenshots: testCase.screenshots?.map((url: string, idx: number) => ({
+      name: `screenshot-${idx + 1}.png`,
+      url,
+    })),
+    retryResults: testCase.retryResults,
+  };
+
+  return <TestCaseDetails testCase={testCaseForDetails} />;
+}
 
 export default function TestDetailPage({
   params,
@@ -158,7 +218,7 @@ export default function TestDetailPage({
     return Array.from(dailyStats.values()).sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
     );
-  }, [data?.history]);
+  }, [data]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -357,55 +417,67 @@ export default function TestDetailPage({
               <h2 className="text-lg font-semibold mb-4">
                 Recent Runs ({data?.history.length || 0})
               </h2>
-              <div className="space-y-2">
+              <Accordion type="single" collapsible className="w-full">
                 {data?.history
                   .slice()
                   .reverse()
                   .slice(0, 20)
                   .map((item, idx) => (
-                    <a
+                    <AccordionItem
                       key={idx}
-                      href={`/runs/${item.testRunId}`}
-                      className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50"
+                      value={`run-${idx}`}
+                      className="border-border"
                     >
-                      <div className="flex items-center gap-3">
-                        {item.status === "passed" && (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        )}
-                        {item.status === "failed" && (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        {item.status === "flaky" && (
-                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                        )}
-                        {item.status === "skipped" && (
-                          <Clock className="h-4 w-4 text-gray-500" />
-                        )}
+                      <AccordionTrigger className="hover:no-underline py-3">
+                        <div className="flex items-center justify-between w-full pr-4">
+                          <div className="flex items-center gap-3">
+                            {item.status === "passed" && (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            )}
+                            {item.status === "failed" && (
+                              <XCircle className="h-4 w-4 text-red-500" />
+                            )}
+                            {item.status === "flaky" && (
+                              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                            )}
+                            {item.status === "skipped" && (
+                              <Clock className="h-4 w-4 text-gray-500" />
+                            )}
 
-                        <div>
-                          <p className="text-sm font-medium">
-                            {new Date(item.timestamp).toLocaleString()}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {item.environment && (
-                              <Badge variant="outline">
-                                {item.environment}
-                              </Badge>
-                            )}
-                            {item.trigger && (
-                              <Badge variant="outline">{item.trigger}</Badge>
-                            )}
-                            {item.branch && <span>{item.branch}</span>}
+                            <div className="text-left">
+                              <p className="text-sm font-medium">
+                                {new Date(item.timestamp).toLocaleString()}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                {item.environment && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {item.environment}
+                                  </Badge>
+                                )}
+                                {item.trigger && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {item.trigger}
+                                  </Badge>
+                                )}
+                                {item.branch && <span>{item.branch}</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-sm text-muted-foreground">
+                            {(item.duration / 1000).toFixed(2)}s
                           </div>
                         </div>
-                      </div>
-
-                      <div className="text-sm text-muted-foreground">
-                        {(item.duration / 1000).toFixed(2)}s
-                      </div>
-                    </a>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <TestRunDetails
+                          testRunId={item.testRunId}
+                          suiteTestId={resolvedParams.testId}
+                        />
+                      </AccordionContent>
+                    </AccordionItem>
                   ))}
-              </div>
+              </Accordion>
             </Card>
           </>
         )}

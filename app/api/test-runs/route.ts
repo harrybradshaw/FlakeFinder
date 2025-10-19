@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const project = searchParams.get("project");
     const environment = searchParams.get("environment");
     const trigger = searchParams.get("trigger");
+    const suite = searchParams.get("suite");
     const timeRange = searchParams.get("timeRange") || "7d";
     const contentHash = searchParams.get("contentHash");
 
@@ -102,10 +103,11 @@ export async function GET(request: NextRequest) {
         startDate.setDate(now.getDate() - 7);
     }
 
-    // Look up project/environment/trigger IDs if filters are provided
+    // Look up project/environment/trigger/suite IDs if filters are provided
     let projectId = null;
     let environmentId = null;
     let triggerId = null;
+    let suiteId = null;
 
     if (project && project !== "all") {
       const { data: projData } = await supabase
@@ -138,6 +140,17 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (trigData) triggerId = trigData.id;
+    }
+
+    if (suite && suite !== "all") {
+      const { data: suiteData } = await supabase
+        .from("suites")
+        .select("id")
+        .eq("name", suite)
+        .eq("active", true)
+        .single();
+
+      if (suiteData) suiteId = suiteData.id;
     }
 
     // Fetch test runs from database with filters (join with projects, environments and triggers)
@@ -178,7 +191,60 @@ export async function GET(request: NextRequest) {
       query = query.gte("timestamp", startDate.toISOString());
     }
 
-    const { data, error } = await query;
+    let data = null;
+    let error = null;
+
+    // If suite filter is applied, we need to filter test runs that have tests in that suite
+    if (suiteId) {
+      // First, get suite_test_ids for this suite
+      const { data: suiteTestIds, error: suiteTestError } = await supabase
+        .from("suite_tests")
+        .select("id")
+        .eq("suite_id", suiteId);
+
+      if (suiteTestError) {
+        console.error("[API] Error fetching suite tests:", suiteTestError);
+        return NextResponse.json(
+          { error: suiteTestError.message },
+          { status: 500 },
+        );
+      }
+
+      const suiteTestIdList = suiteTestIds?.map((st) => st.id) || [];
+
+      if (suiteTestIdList.length === 0) {
+        // No tests in this suite, return empty
+        return NextResponse.json({ runs: [] });
+      }
+
+      // Get test_run_ids that have tests with these suite_test_ids
+      const { data: testsInSuite, error: testsError } = await supabase
+        .from("tests")
+        .select("test_run_id")
+        .in("suite_test_id", suiteTestIdList);
+
+      if (testsError) {
+        console.error("[API] Error fetching tests in suite:", testsError);
+        return NextResponse.json({ error: testsError.message }, { status: 500 });
+      }
+
+      const testRunIdsInSuite = [
+        ...new Set(testsInSuite?.map((t) => t.test_run_id) || []),
+      ];
+
+      if (testRunIdsInSuite.length === 0) {
+        // No test runs with tests in this suite
+        return NextResponse.json({ runs: [] });
+      }
+
+      // Add suite filter to query
+      query = query.in("id", testRunIdsInSuite);
+    }
+
+    // Execute query
+    const queryResult = await query;
+    data = queryResult.data;
+    error = queryResult.error;
 
     if (error) {
       console.error("[API] Supabase error:", error);

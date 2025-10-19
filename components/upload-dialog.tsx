@@ -38,6 +38,7 @@ export function UploadDialog() {
   const [open, setOpen] = useState(false);
   const [environment, setEnvironment] = useState("");
   const [trigger, setTrigger] = useState("");
+  const [suite, setSuite] = useState("");
   const [branch, setBranch] = useState("");
   const [commit, setCommit] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -56,15 +57,17 @@ export function UploadDialog() {
   } | null>(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
 
-  // Fetch environments and triggers dynamically
+  // Fetch environments, triggers, and suites dynamically
   const { data: environmentsData } = useSWRImmutable(
     "/api/environments",
     fetcher,
   );
   const { data: triggersData } = useSWRImmutable("/api/triggers", fetcher);
+  const { data: suitesData } = useSWRImmutable("/api/suites", fetcher);
 
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
+  const suites = suitesData?.suites || [];
 
   const extractMetadataFromZip = async (file: File) => {
     try {
@@ -444,6 +447,7 @@ export function UploadDialog() {
         formData.append("file", file);
         formData.append("environment", environment);
         formData.append("trigger", trigger);
+        formData.append("suite", suite);
         formData.append("branch", branch);
         formData.append("commit", commit || "");
 
@@ -495,6 +499,7 @@ export function UploadDialog() {
       setOpen(false);
       setEnvironment("");
       setTrigger("");
+      setSuite("");
       setBranch("");
       setCommit("");
       setFile(null);
@@ -510,6 +515,7 @@ export function UploadDialog() {
     setFile(null);
     setEnvironment("");
     setTrigger("");
+    setSuite("");
     setBranch("");
     setCommit("");
     setResult(null);
@@ -699,6 +705,24 @@ export function UploadDialog() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="suite">
+                  Suite <span className="text-destructive">*</span>
+                </Label>
+                <Select value={suite} onValueChange={setSuite}>
+                  <SelectTrigger id="suite">
+                    <SelectValue placeholder="Select suite" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {suites.map((s: any) => (
+                      <SelectItem key={s.id} value={s.name}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="branch">
                   Branch <span className="text-destructive">*</span>
                 </Label>
@@ -760,6 +784,7 @@ export function UploadDialog() {
                 !file ||
                 !environment ||
                 !trigger ||
+                !suite ||
                 !branch ||
                 isDuplicate ||
                 checkingDuplicate

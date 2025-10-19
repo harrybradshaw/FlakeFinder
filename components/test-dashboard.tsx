@@ -10,7 +10,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectSeparator,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { TestRunsList } from "@/components/test-runs-list";
 import { TrendsChart } from "@/components/trends-chart";
 import { TestStats } from "@/components/test-stats";
@@ -34,9 +37,10 @@ const configFetcher = async (url: string) => {
 export function TestDashboard() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>("all");
   const [selectedTrigger, setSelectedTrigger] = useState<string>("all");
+  const [selectedSuite, setSelectedSuite] = useState<string>("all");
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("7d");
 
-  // Fetch environments and triggers dynamically
+  // Fetch environments, triggers, and suites dynamically
   const { data: environmentsData } = useSWRImmutable(
     "/api/environments",
     configFetcher,
@@ -47,9 +51,13 @@ export function TestDashboard() {
   const { data: triggersData } = useSWR("/api/triggers", configFetcher, {
     revalidateOnFocus: false,
   });
+  const { data: suitesData } = useSWR("/api/suites", configFetcher, {
+    revalidateOnFocus: false,
+  });
 
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
+  const suites = suitesData?.suites || [];
 
   // Build API URL with query parameters
   const apiUrl = useMemo(() => {
@@ -63,9 +71,12 @@ export function TestDashboard() {
     if (selectedTrigger !== "all") {
       params.append("trigger", selectedTrigger);
     }
+    if (selectedSuite !== "all") {
+      params.append("suite", selectedSuite);
+    }
 
     return `/api/test-runs?${params.toString()}`;
-  }, [selectedEnvironment, selectedTrigger, selectedTimeRange]);
+  }, [selectedEnvironment, selectedTrigger, selectedSuite, selectedTimeRange]);
 
   // Fetch data with SWR
   const {
@@ -86,7 +97,7 @@ export function TestDashboard() {
   return (
     <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6">
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-6 flex items-center gap-4 flex-wrap">
           <Select
             value={selectedEnvironment}
             onValueChange={setSelectedEnvironment}
@@ -101,6 +112,21 @@ export function TestDashboard() {
                   {env.display_name}
                 </SelectItem>
               ))}
+              <SelectSeparator />
+              <div className="p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    // TODO: Open add environment dialog
+                    alert("Add Environment - Coming soon!");
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Environment
+                </Button>
+              </div>
             </SelectContent>
           </Select>
 
@@ -115,6 +141,50 @@ export function TestDashboard() {
                   {trig.display_name}
                 </SelectItem>
               ))}
+              <SelectSeparator />
+              <div className="p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    // TODO: Open add trigger dialog
+                    alert("Add Trigger - Coming soon!");
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Trigger
+                </Button>
+              </div>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedSuite} onValueChange={setSelectedSuite}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Suite" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Suites</SelectItem>
+              {suites.map((suite: any) => (
+                <SelectItem key={suite.id} value={suite.name}>
+                  {suite.name}
+                </SelectItem>
+              ))}
+              <SelectSeparator />
+              <div className="p-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    // TODO: Open add suite dialog
+                    alert("Add Suite - Coming soon!");
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Suite
+                </Button>
+              </div>
             </SelectContent>
           </Select>
 

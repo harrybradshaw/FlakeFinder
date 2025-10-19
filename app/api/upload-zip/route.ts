@@ -61,30 +61,29 @@ export async function POST(request: NextRequest) {
     const project = formData.get("project") as string;
     let environment = formData.get("environment") as string;
     const trigger = formData.get("trigger") as string;
+    const suite = formData.get("suite") as string;
     let branch = formData.get("branch") as string;
     const commit = formData.get("commit") as string;
 
-    console.log("[v0] Upload params:", { environment, trigger, branch, commit, fileName: file?.name });
-
-    if (!file || !environment || !trigger) {
+    if (!file || !environment || !trigger || !suite) {
       return NextResponse.json(
         {
-          error: "Missing required fields: file, environment, trigger",
+          error: "Missing required fields: file, environment, trigger, suite",
         },
         { status: 400 },
       );
     }
-    
+
     // Branch can be extracted from CI metadata later if not provided
     if (!branch) {
       branch = "unknown";
-      console.log("[v0] Branch not provided, will attempt to extract from CI metadata");
+      console.log(
+        "[v0] Branch not provided, will attempt to extract from CI metadata",
+      );
     }
 
     const arrayBuffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
-
-    console.log("[v0] ZIP contents:", Object.keys(zip.files));
 
     // Extract metadata from data/*.dat files in the outer zip
     const metadataMap = new Map<string, any>();
@@ -105,8 +104,6 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-
-    console.log(`[v0] Found ${metadataMap.size} metadata files`);
 
     const tests: Array<{
       id: string;
@@ -168,52 +165,65 @@ export async function POST(request: NextRequest) {
           if (reportData.metadata?.ci) {
             ciMetadata = reportData.metadata.ci;
             console.log("[v0] Found CI metadata:", ciMetadata);
-            
+
             // Always try to extract branch from CI metadata (prefer CI over form data)
-            let detectedBranch = 
+            let detectedBranch =
               ciMetadata.GITHUB_HEAD_REF || // GitHub PR branch
-              ciMetadata.GITHUB_REF_NAME ||  // GitHub branch/tag name
+              ciMetadata.GITHUB_REF_NAME || // GitHub branch/tag name
               ciMetadata.BRANCH ||
               ciMetadata.GIT_BRANCH ||
               ciMetadata.CI_COMMIT_BRANCH ||
               null;
-            
+
             // If we have PR metadata but no branch, extract from PR title
             if (!detectedBranch && ciMetadata.prTitle) {
               // Try to extract ticket/issue key from PR title (e.g., "WS-2938: Fix something" -> "WS-2938")
               const ticketMatch = ciMetadata.prTitle.match(/^([A-Z]+-\d+)/);
               if (ticketMatch) {
                 detectedBranch = ticketMatch[1];
-                console.log("[v0] Extracted branch from PR title:", detectedBranch);
+                console.log(
+                  "[v0] Extracted branch from PR title:",
+                  detectedBranch,
+                );
               } else {
                 // If no ticket pattern, use PR number from URL
                 const prMatch = ciMetadata.prHref?.match(/\/pull\/(\d+)$/);
                 if (prMatch) {
                   detectedBranch = `pr-${prMatch[1]}`;
-                  console.log("[v0] Using PR number as branch:", detectedBranch);
+                  console.log(
+                    "[v0] Using PR number as branch:",
+                    detectedBranch,
+                  );
                 }
               }
             }
-            
+
             if (detectedBranch) {
-              console.log(`[v0] Overriding branch "${branch}" with CI metadata: "${detectedBranch}"`);
+              console.log(
+                `[v0] Overriding branch "${branch}" with CI metadata: "${detectedBranch}"`,
+              );
               branch = detectedBranch;
             } else {
-              console.log("[v0] No branch found in CI metadata, using form value:", branch);
+              console.log(
+                "[v0] No branch found in CI metadata, using form value:",
+                branch,
+              );
             }
-            
+
             // Map environment names (e.g., "preview" -> "development")
             const environmentMapping: Record<string, string> = {
-              "preview": "development",
-              "dev": "development",
-              "prod": "production",
-              "stage": "staging",
-              "test": "testing",
+              preview: "development",
+              dev: "development",
+              prod: "production",
+              stage: "staging",
+              test: "testing",
             };
-            
+
             const normalizedEnv = environment.toLowerCase();
             if (environmentMapping[normalizedEnv]) {
-              console.log(`[v0] Mapping environment "${environment}" -> "${environmentMapping[normalizedEnv]}"`);
+              console.log(
+                `[v0] Mapping environment "${environment}" -> "${environmentMapping[normalizedEnv]}"`,
+              );
               environment = environmentMapping[normalizedEnv];
             }
           }
@@ -519,15 +529,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Final validation and logging after CI metadata extraction
-    console.log("[v0] Final upload parameters after CI extraction:", { 
-      environment, 
-      trigger, 
-      branch, 
-      commit: commit || "unknown" 
+    console.log("[v0] Final upload parameters after CI extraction:", {
+      environment,
+      trigger,
+      branch,
+      commit: commit || "unknown",
     });
-    
+
     if (branch === "unknown") {
-      console.warn("[v0] WARNING: Branch is still 'unknown' after CI metadata extraction");
+      console.warn(
+        "[v0] WARNING: Branch is still 'unknown' after CI metadata extraction",
+      );
     }
 
     const stats = {
@@ -766,9 +778,29 @@ export async function POST(request: NextRequest) {
         } else {
           console.log("[v0] Inserted test run:", runData);
 
-          // First, upsert suite_tests (canonical test definitions)
+          // Get the suite for this project (must exist)
+          const { data: targetSuite, error: suiteError } = await supabase
+            .from("suites")
+            .select("id")
+            .eq("project_id", projectId)
+            .eq("name", suite)
+            .single();
+
+          if (suiteError || !targetSuite) {
+            console.error("[v0] Suite not found:", suite, suiteError);
+            return NextResponse.json(
+              { error: `Suite "${suite}" not found. Please create it first.` },
+              { status: 400 },
+            );
+          }
+
+          const suiteId = targetSuite.id;
+          console.log("[v0] Using suite:", suite, suiteId);
+
+          // Upsert suite_tests (canonical test definitions) with suite_id
           const suiteTestsToUpsert = tests.map((test) => ({
             project_id: projectId,
+            suite_id: suiteId,
             file: test.file,
             name: test.name,
           }));
@@ -782,7 +814,10 @@ export async function POST(request: NextRequest) {
             .select();
 
           if (suiteTestsError) {
-            console.error("[v0] Failed to upsert suite_tests:", suiteTestsError);
+            console.error(
+              "[v0] Failed to upsert suite_tests:",
+              suiteTestsError,
+            );
             return NextResponse.json(
               { error: "Failed to create test definitions" },
               { status: 500 },

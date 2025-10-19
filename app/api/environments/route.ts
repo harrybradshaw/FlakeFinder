@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
 
 // Cached function to get all active environments
 const getActiveEnvironments = cache(async () => {

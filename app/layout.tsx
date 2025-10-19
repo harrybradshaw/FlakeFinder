@@ -1,7 +1,6 @@
 import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { AppHeader } from "@/components/app-header";
 import "./globals.css";
@@ -21,14 +20,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={`font-sans antialiased`}>
-          <AppHeader />
-          {children}
-          <Analytics />
-        </body>
-      </html>
-    </ClerkProvider>
+    <Suspense fallback={null}>
+      <ClerkProvider>
+        <html lang="en">
+          <body className={`font-sans antialiased`}>
+            <AppHeader />
+            {children}
+          </body>
+        </html>
+      </ClerkProvider>
+    </Suspense>
   );
 }

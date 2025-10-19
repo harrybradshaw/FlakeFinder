@@ -6,8 +6,6 @@ export async function GET(
 ) {
   try {
     const { testId } = await params;
-
-    // testId is now the suite_test_id (UUID)
     const suiteTestId = testId;
 
     const searchParams = request.nextUrl.searchParams;
@@ -38,10 +36,7 @@ export async function GET(
 
     if (suiteTestError || !suiteTest) {
       console.error("[API] Error fetching suite test:", suiteTestError);
-      return NextResponse.json(
-        { error: "Test not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "Test not found" }, { status: 404 });
     }
 
     // Calculate time range
@@ -127,10 +122,10 @@ export async function GET(
 
     const runIds = runs.map((r) => r.id);
 
-    // Fetch this specific test across all runs using suite_test_id
     const { data: tests, error: testsError } = await supabase
       .from("tests")
-      .select("status, duration, test_run_id, created_at")
+      .select("status, duration, test_run_id, created_at, started_at")
+      .order("started_at", { ascending: true })
       .in("test_run_id", runIds)
       .eq("suite_test_id", suiteTestId);
 
@@ -143,7 +138,7 @@ export async function GET(
     const history = (tests || []).map((test) => {
       const run = runs.find((r) => r.id === test.test_run_id);
       return {
-        timestamp: run?.timestamp || test.created_at,
+        timestamp: test.started_at,
         status: test.status,
         duration: test.duration,
         branch: run?.branch,

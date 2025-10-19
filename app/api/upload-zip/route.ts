@@ -54,6 +54,24 @@ interface PlaywrightReport {
   };
 }
 
+/**
+ * Helper function to determine test status based on outcome and result
+ */
+function determineTestStatus(
+  outcome: string,
+  lastResultStatus: string
+): "passed" | "failed" | "flaky" | "skipped" | "timedOut" {
+  if (lastResultStatus === "skipped") {
+    return "skipped";
+  } else if (outcome === "expected") {
+    return lastResultStatus as "passed" | "failed" | "timedOut";
+  } else if (outcome === "flaky") {
+    return "flaky";
+  } else {
+    return "failed";
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -375,18 +393,17 @@ export async function POST(request: NextRequest) {
                       finalError = lastResult.errors[0];
                     }
 
+                    // Calculate total duration as sum of all attempts (retries)
+                    const totalDuration = test.results?.reduce(
+                      (sum: number, result) => sum + (result.duration || 0),
+                      0
+                    ) || 0;
+
                     tests.push({
                       id: test.testId,
                       name: test.title,
-                      status:
-                        lastResult.status === "skipped"
-                          ? "skipped"
-                          : test.outcome === "expected"
-                            ? lastResult.status
-                            : test.outcome === "flaky"
-                              ? "flaky"
-                              : "failed",
-                      duration: lastResult.duration || 0,
+                      status: determineTestStatus(test.outcome, lastResult.status),
+                      duration: totalDuration,
                       file:
                         test.location?.file || testFile.fileName || "unknown",
                       worker_index: lastResult.workerIndex,
@@ -436,18 +453,17 @@ export async function POST(request: NextRequest) {
                 }
               }
 
+              // Calculate total duration as sum of all attempts (retries)
+              const totalDuration = spec.results.reduce(
+                (sum: number, r) => sum + (r.duration || 0),
+                0
+              );
+
               tests.push({
                 id: spec.testId,
                 name: spec.title,
-                status:
-                  result.status === "skipped"
-                    ? "skipped"
-                    : spec.outcome === "expected"
-                      ? result.status
-                      : spec.outcome === "flaky"
-                        ? "flaky"
-                        : "failed",
-                duration: result.duration,
+                status: determineTestStatus(spec.outcome, result.status),
+                duration: totalDuration,
                 file: spec.location.file,
                 error: result.error?.message,
                 screenshots,
@@ -478,7 +494,6 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Found screenshots:", screenshotFiles.length);
 
     const screenshotUrls: Record<string, string> = {};
-    const shouldWriteBlobs = false;
 
     // Process each screenshot
     for (const screenshotPath of screenshotFiles) {
@@ -486,25 +501,60 @@ export async function POST(request: NextRequest) {
       if (screenshotFile) {
         const screenshotBuffer = await screenshotFile.async("nodebuffer");
 
-        // Check if Vercel Blob is configured
-        if (process.env.BLOB_READ_WRITE_TOKEN && shouldWriteBlobs) {
+        // Check if Supabase Storage is configured
+        if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
           try {
-            // Upload to Vercel Blob
-            const { put } = await import("@vercel/blob");
-            const blob = await put(screenshotPath, screenshotBuffer, {
-              access: "public",
-            });
-            screenshotUrls[screenshotPath] = blob.url;
-            console.log("[v0] Uploaded screenshot to Blob:", blob.url);
+            // Upload to Supabase Storage
+            const { createClient } = await import("@supabase/supabase-js");
+            const supabaseAdmin = createClient(
+              process.env.NEXT_PUBLIC_SUPABASE_URL,
+              process.env.SUPABASE_SERVICE_ROLE_KEY,
+              {
+                auth: {
+                  autoRefreshToken: false,
+                  persistSession: false,
+                },
+              }
+            );
+
+            // Generate unique filename: testRunId/timestamp-originalname
+            const timestamp = Date.now();
+            const fileName = screenshotPath.split('/').pop() || 'screenshot.png';
+            const storagePath = `screenshots/${timestamp}-${fileName}`;
+
+            const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+              .from('test-screenshots')
+              .upload(storagePath, screenshotBuffer, {
+                contentType: 'image/png',
+                cacheControl: '3600',
+                upsert: false,
+              });
+
+            if (uploadError) {
+              throw uploadError;
+            }
+
+            // Generate signed URL (valid for 1 year)
+            // This allows private bucket access without making it public
+            const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
+              .from('test-screenshots')
+              .createSignedUrl(storagePath, 31536000); // 1 year in seconds
+
+            if (signedUrlError) {
+              throw signedUrlError;
+            }
+
+            screenshotUrls[screenshotPath] = signedUrlData.signedUrl;
+            console.log("[v0] Uploaded screenshot to Supabase Storage (private):", storagePath);
           } catch (error) {
-            console.error("[v0] Failed to upload to Blob:", error);
+            console.error("[v0] Failed to upload to Supabase Storage:", error);
             // Fall back to base64 encoding
             const base64 = screenshotBuffer.toString("base64");
             screenshotUrls[screenshotPath] = `data:image/png;base64,${base64}`;
           }
         } else {
           console.log(
-            "[v0] Blob storage not configured, using base64 encoding",
+            "[v0] Supabase Storage not configured, using base64 encoding",
           );
           // Convert to base64 for inline display
           const base64 = screenshotBuffer.toString("base64");

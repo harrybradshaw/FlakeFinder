@@ -1,13 +1,18 @@
-import { TestDetailsView } from "@/components/test-details-view"
-import { mockTestRuns } from "@/lib/mock-data"
-import { notFound } from "next/navigation"
+import { TestDetailsView } from "@/components/test-details-view";
+import { notFound } from "next/navigation";
+import { getTestRunById } from "@/lib/test-runs";
 
-export default function TestRunPage({ params }: { params: { id: string } }) {
-  const testRun = mockTestRuns.find((run) => run.id === params.id)
+export default async function TestRunPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const testRun = await getTestRunById(id);
 
   if (!testRun) {
-    notFound()
+    notFound();
   }
 
-  return <TestDetailsView testRun={testRun} />
+  return <TestDetailsView testRun={testRun} />;
 }

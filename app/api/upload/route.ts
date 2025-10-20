@@ -1,51 +1,54 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await request.json();
 
     // Validate required fields
     if (!body.environment || !body.trigger || !body.branch || !body.results) {
       return NextResponse.json(
-        { error: "Missing required fields: environment, trigger, branch, results" },
+        {
+          error:
+            "Missing required fields: environment, trigger, branch, results",
+        },
         { status: 400 },
-      )
+      );
     }
 
     // Extract test results from Playwright JSON reporter format
-    const { environment, trigger, branch, commit, results } = body
+    const { environment, trigger, branch, commit, results } = body;
 
     // Calculate test statistics
     const total =
       results.suites?.reduce((acc: number, suite: any) => {
-        return acc + (suite.specs?.length || 0)
-      }, 0) || 0
+        return acc + (suite.specs?.length || 0);
+      }, 0) || 0;
 
-    let passed = 0
-    let failed = 0
-    let flaky = 0
+    let passed = 0;
+    let failed = 0;
+    let flaky = 0;
 
     results.suites?.forEach((suite: any) => {
       suite.specs?.forEach((spec: any) => {
-        const testResults = spec.tests?.[0]?.results || []
-        const hasPass = testResults.some((r: any) => r.status === "passed")
-        const hasFail = testResults.some((r: any) => r.status === "failed")
+        const testResults = spec.tests?.[0]?.results || [];
+        const hasPass = testResults.some((r: any) => r.status === "passed");
+        const hasFail = testResults.some((r: any) => r.status === "failed");
 
         if (hasPass && hasFail) {
-          flaky++
+          flaky++;
         } else if (hasPass) {
-          passed++
+          passed++;
         } else if (hasFail) {
-          failed++
+          failed++;
         }
-      })
-    })
+      });
+    });
 
     // Calculate duration
-    const duration = results.stats?.duration || 0
-    const minutes = Math.floor(duration / 60000)
-    const seconds = Math.floor((duration % 60000) / 1000)
-    const durationStr = `${minutes}m ${seconds}s`
+    const duration = results.stats?.duration || 0;
+    const minutes = Math.floor(duration / 60000);
+    const seconds = Math.floor((duration % 60000) / 1000);
+    const durationStr = `${minutes}m ${seconds}s`;
 
     // Create test run object
     const testRun = {
@@ -61,11 +64,11 @@ export async function POST(request: NextRequest) {
       flaky,
       duration: durationStr,
       results, // Store full results for detailed view
-    }
+    };
 
     // In a real app, you would save this to a database
     // For now, we'll just return success
-    console.log("[v0] Test run uploaded:", testRun)
+    console.log("[v0] Test run uploaded:", testRun);
 
     return NextResponse.json({
       success: true,
@@ -77,9 +80,12 @@ export async function POST(request: NextRequest) {
         failed,
         flaky,
       },
-    })
+    });
   } catch (error) {
-    console.error("[v0] Error uploading test results:", error)
-    return NextResponse.json({ error: "Failed to process test results" }, { status: 500 })
+    console.error("[v0] Error uploading test results:", error);
+    return NextResponse.json(
+      { error: "Failed to process test results" },
+      { status: 500 },
+    );
   }
 }

@@ -1,15 +1,56 @@
 export interface TestRun {
-  id: string
-  timestamp: string
-  environment: "production" | "staging" | "development"
-  trigger: "ci" | "pull_request" | "merge_queue" | "post_deploy"
-  branch: string
-  commit: string
-  total: number
-  passed: number
-  failed: number
-  flaky: number
-  duration: string
+  id: string;
+  timestamp: string;
+  project?: string;
+  project_display?: string;
+  project_color?: string;
+  environment: string;
+  environment_display?: string;
+  environment_color?: string;
+  trigger: string;
+  trigger_display?: string;
+  trigger_icon?: string;
+  branch: string;
+  commit: string;
+  total: number;
+  passed: number;
+  failed: number;
+  flaky: number;
+  skipped?: number;
+  duration: string;
+  hasScreenshots?: boolean;
+  uploaded_filename?: string;
+  ci_metadata?: Record<string, any>;
+  tests?: Array<{
+    id: string; // UUID - primary key in tests table (this specific execution instance)
+    suite_test_id?: string; // UUID - foreign key to suite_tests table (the canonical test definition)
+    name: string;
+    status: "passed" | "failed" | "flaky" | "skipped" | "timedOut";
+    duration: number;
+    file: string;
+    worker_index?: number;
+    started_at?: string;
+    error?: string;
+    screenshots?: string[];
+    retryResults?: Array<{
+      id?: string;
+      retry_index?: number;
+      retryIndex?: number;
+      status: string;
+      duration: number;
+      error?: string;
+      error_stack?: string;
+      errorStack?: string;
+      screenshots?: string[];
+      attachments?: Array<{
+        name: string;
+        contentType: string;
+        content: string;
+      }>;
+      started_at?: string;
+      startTime?: string;
+    }>;
+  }>;
 }
 
 export const mockTestRuns: TestRun[] = [
@@ -25,6 +66,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 0,
     flaky: 0,
     duration: "12m 34s",
+    hasScreenshots: true,
   },
   {
     id: "2",
@@ -38,6 +80,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 2,
     flaky: 1,
     duration: "9m 12s",
+    hasScreenshots: false,
   },
   {
     id: "3",
@@ -51,6 +94,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 3,
     flaky: 0,
     duration: "13m 01s",
+    hasScreenshots: true,
   },
   {
     id: "4",
@@ -64,6 +108,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 4,
     flaky: 2,
     duration: "7m 45s",
+    hasScreenshots: false,
   },
   {
     id: "5",
@@ -77,6 +122,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 5,
     flaky: 2,
     duration: "11m 22s",
+    hasScreenshots: true,
   },
   {
     id: "6",
@@ -90,6 +136,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 0,
     flaky: 0,
     duration: "12m 18s",
+    hasScreenshots: false,
   },
   {
     id: "7",
@@ -103,6 +150,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 6,
     flaky: 1,
     duration: "8m 56s",
+    hasScreenshots: true,
   },
   {
     id: "8",
@@ -116,6 +164,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 4,
     flaky: 1,
     duration: "12m 45s",
+    hasScreenshots: false,
   },
   {
     id: "9",
@@ -129,6 +178,7 @@ export const mockTestRuns: TestRun[] = [
     failed: 5,
     flaky: 1,
     duration: "6m 30s",
+    hasScreenshots: true,
   },
   {
     id: "10",
@@ -142,5 +192,6 @@ export const mockTestRuns: TestRun[] = [
     failed: 2,
     flaky: 0,
     duration: "12m 55s",
+    hasScreenshots: false,
   },
-]
+];

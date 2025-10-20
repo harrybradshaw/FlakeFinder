@@ -1,29 +1,34 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
-import "./globals.css"
+import React, { Suspense } from "react";
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import { AppHeader } from "@/components/app-header";
+import "./globals.css";
 
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
+const _geist = Geist({ subsets: ["latin"] });
+const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Playwright Test Reports",
+  title: "FlakeFinder",
   description: "Monitor your Playwright test results and trends over time",
-  generator: "v0.app",
-}
+  generator: "Next.js",
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`font-sans antialiased`}>
-        {children}
-        <Analytics />
-      </body>
-    </html>
-  )
+    <Suspense fallback={null}>
+      <ClerkProvider>
+        <html lang="en">
+          <body className={`font-sans antialiased`}>
+            <AppHeader />
+            {children}
+          </body>
+        </html>
+      </ClerkProvider>
+    </Suspense>
+  );
 }

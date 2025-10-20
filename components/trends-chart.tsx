@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { Card } from "@/components/ui/card"
+import { Card } from "@/components/ui/card";
 import {
   LineChart,
   Line,
@@ -12,12 +12,12 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
-} from "recharts"
-import type { TestRun } from "@/lib/mock-data"
+} from "recharts";
+import type { TestRun } from "@/lib/mock-data";
 
 interface TrendsChartProps {
-  runs: TestRun[]
-  timeRange: string
+  runs: TestRun[];
+  timeRange: string;
 }
 
 export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
@@ -25,13 +25,16 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
     .slice()
     .reverse()
     .map((run) => ({
-      date: new Date(run.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      date: new Date(run.timestamp).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
       passed: run.passed,
       failed: run.failed,
       flaky: run.flaky,
       passRate: ((run.passed / run.total) * 100).toFixed(1),
       total: run.total,
-    }))
+    }));
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -41,13 +44,29 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="passRateGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                <stop
+                  offset="5%"
+                  stopColor="hsl(var(--chart-1))"
+                  stopOpacity={0.3}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="hsl(var(--chart-1))"
+                  stopOpacity={0}
+                />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} domain={[0, 100]} />
+            <XAxis
+              dataKey="date"
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+            />
+            <YAxis
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+              domain={[0, 100]}
+            />
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--popover))",
@@ -71,7 +90,11 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+            <XAxis
+              dataKey="date"
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+            />
             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
             <Tooltip
               contentStyle={{
@@ -81,9 +104,27 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
               }}
             />
             <Legend />
-            <Line type="monotone" dataKey="passed" stroke="#22c55e" strokeWidth={2} dot={{ fill: "#22c55e" }} />
-            <Line type="monotone" dataKey="failed" stroke="#ef4444" strokeWidth={2} dot={{ fill: "#ef4444" }} />
-            <Line type="monotone" dataKey="flaky" stroke="#eab308" strokeWidth={2} dot={{ fill: "#eab308" }} />
+            <Line
+              type="monotone"
+              dataKey="passed"
+              stroke="#22c55e"
+              strokeWidth={2}
+              dot={{ fill: "#22c55e" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="failed"
+              stroke="#ef4444"
+              strokeWidth={2}
+              dot={{ fill: "#ef4444" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="flaky"
+              stroke="#eab308"
+              strokeWidth={2}
+              dot={{ fill: "#eab308" }}
+            />
           </LineChart>
         </ResponsiveContainer>
       </Card>
@@ -94,12 +135,24 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                <stop
+                  offset="5%"
+                  stopColor="hsl(var(--chart-2))"
+                  stopOpacity={0.3}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="hsl(var(--chart-2))"
+                  stopOpacity={0}
+                />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+            <XAxis
+              dataKey="date"
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+            />
             <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
             <Tooltip
               contentStyle={{
@@ -119,5 +172,5 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
         </ResponsiveContainer>
       </Card>
     </div>
-  )
+  );
 }

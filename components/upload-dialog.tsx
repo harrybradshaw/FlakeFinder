@@ -1,9 +1,11 @@
 "use client";
 
 import type React from "react";
+
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import useSWRImmutable from "swr/immutable";
+import { calculateContentHash } from "@/lib/playwright-report-utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -331,40 +333,12 @@ export function UploadDialog() {
             // Then optimize and send optimized file with pre-calculated hash
             setCheckingDuplicate(true);
             try {
-              // Calculate content hash from the report data we already extracted
-              const extractTests = (suites: any[]): any[] => {
-                return suites.flatMap((suite) => {
-                  const tests = (suite.specs || []).flatMap((spec: any) =>
-                    (spec.results || []).map((result: any) => ({
-                      name: spec.title,
-                      file: suite.file,
-                      status: result.status,
-                      duration: result.duration,
-                      startTime: result.startTime,
-                    })),
-                  );
-                  // Recursively process nested suites
-                  if (suite.suites && suite.suites.length > 0) {
-                    tests.push(...extractTests(suite.suites));
-                  }
-                  return tests;
-                });
-              };
-
-              const hashContent = {
-                tests: extractTests(reportData.suites || []).sort(
-                  (a: any, b: any) =>
-                    `${a.file}:${a.name}`.localeCompare(`${b.file}:${b.name}`),
-                ),
-              };
-
-              const hashBuffer = await crypto.subtle.digest(
-                "SHA-256",
-                new TextEncoder().encode(JSON.stringify(hashContent)),
+              // Process the report data to extract tests in the same format as the backend
+              const { processPlaywrightReportFile } = await import(
+                "@/lib/playwright-report-utils"
               );
-              const contentHash = Array.from(new Uint8Array(hashBuffer))
-                .map((b) => b.toString(16).padStart(2, "0"))
-                .join("");
+              const { tests } = await processPlaywrightReportFile(file);
+              const contentHash = await calculateContentHash(tests);
 
               console.log("[Duplicate Check] Calculated hash:", contentHash);
 

@@ -20,7 +20,7 @@ interface TrendsChartProps {
   timeRange: string;
 }
 
-export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
+export function TrendsChart({ runs }: TrendsChartProps) {
   const chartData = runs
     .slice()
     .reverse()
@@ -38,6 +38,50 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      <Card className="p-6 lg:col-span-2">
+        <h3 className="text-lg font-semibold mb-4">Test Results Over Time</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis
+              dataKey="date"
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={12}
+            />
+            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--popover))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "8px",
+              }}
+            />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="passed"
+              stroke="#22c55e"
+              strokeWidth={2}
+              dot={{ fill: "#22c55e" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="failed"
+              stroke="#ef4444"
+              strokeWidth={2}
+              dot={{ fill: "#ef4444" }}
+            />
+            <Line
+              type="monotone"
+              dataKey="flaky"
+              stroke="#eab308"
+              strokeWidth={2}
+              dot={{ fill: "#eab308" }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Pass Rate Trend</h3>
         <ResponsiveContainer width="100%" height={300}>
@@ -86,50 +130,6 @@ export function TrendsChart({ runs, timeRange }: TrendsChartProps) {
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Test Results Over Time</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis
-              dataKey="date"
-              stroke="hsl(var(--muted-foreground))"
-              fontSize={12}
-            />
-            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: "8px",
-              }}
-            />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="passed"
-              stroke="#22c55e"
-              strokeWidth={2}
-              dot={{ fill: "#22c55e" }}
-            />
-            <Line
-              type="monotone"
-              dataKey="failed"
-              stroke="#ef4444"
-              strokeWidth={2}
-              dot={{ fill: "#ef4444" }}
-            />
-            <Line
-              type="monotone"
-              dataKey="flaky"
-              stroke="#eab308"
-              strokeWidth={2}
-              dot={{ fill: "#eab308" }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
-
-      <Card className="p-6 lg:col-span-2">
         <h3 className="text-lg font-semibold mb-4">Total Tests Executed</h3>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={chartData}>

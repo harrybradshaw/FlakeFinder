@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { type Database } from "@/types/supabase";
 
 export async function GET(
   request: NextRequest,
@@ -22,7 +23,7 @@ export async function GET(
     }
 
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
@@ -124,7 +125,21 @@ export async function GET(
 
     const { data: tests, error: testsError } = await supabase
       .from("tests")
-      .select("status, duration, test_run_id, created_at, started_at")
+      .select(
+        `
+        status, 
+        duration, 
+        test_run_id, 
+        created_at, 
+        started_at,
+        test_runs!inner(
+          id,
+          branch,
+          environments(name),
+          test_triggers(name)
+        )
+      `,
+      )
       .order("started_at", { ascending: true })
       .in("test_run_id", runIds)
       .eq("suite_test_id", suiteTestId);
@@ -135,14 +150,15 @@ export async function GET(
     }
 
     // Build history with run context
-    const history = (tests || []).map((test) => {
-      const run = runs.find((r) => r.id === test.test_run_id);
+    const history = (tests || []).map((test: any) => {
       return {
         timestamp: test.started_at,
         status: test.status,
         duration: test.duration,
-        branch: run?.branch,
-        testRunId: run?.id,
+        branch: test.test_runs?.branch,
+        testRunId: test.test_runs?.id,
+        environment: test.test_runs?.environments?.name || null,
+        trigger: test.test_runs?.test_triggers?.name || null,
       };
     });
 

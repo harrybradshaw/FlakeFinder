@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { type Database } from "@/types/supabase";
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );

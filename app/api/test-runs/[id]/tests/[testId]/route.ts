@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { type Database } from "@/types/supabase";
+import { type TestDetailsResponse } from "@/types/api";
 
 export async function GET(
   request: NextRequest,
@@ -15,15 +17,15 @@ export async function GET(
     }
 
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
 
-    // Fetch the specific test from this run
+    // Fetch the specific test from this run with suite_test details
     const { data: test, error: testError } = await supabase
       .from("tests")
-      .select("*")
+      .select("*, suite_test:suite_tests(name, file)")
       .eq("test_run_id", testRunId)
       .eq("suite_test_id", suiteTestId)
       .single();
@@ -31,48 +33,52 @@ export async function GET(
     if (testError || !test) {
       console.error("[API] Error fetching test:", testError);
       return NextResponse.json(
-        { error: "Test not found in this run" },
+        { error: "Test not found" },
         { status: 404 },
       );
     }
 
-    // Fetch retry results for this test
-    const { data: retryResults, error: retryError } = await supabase
+    // Fetch test attempts (including retries) for this test
+    const { data: testAttempts, error: attemptsError } = await supabase
       .from("test_results")
       .select("*")
       .eq("test_id", test.id)
       .order("retry_index", { ascending: true });
 
-    if (retryError) {
-      console.error("[API] Error fetching retry results:", retryError);
+    if (attemptsError) {
+      console.error("[getTestDetails] Error fetching test attempts:", attemptsError);
     }
 
-    // Transform to match frontend format
-    const testCase = {
-      id: test.id,
-      suite_test_id: test.suite_test_id,
-      name: test.name,
-      file: test.file,
-      status: test.status,
-      duration: test.duration,
-      error: test.error,
-      screenshots: test.screenshots || [],
-      retryResults: (retryResults || []).map((retry) => ({
-        retry_index: retry.retry_index,
-        retryIndex: retry.retry_index,
-        status: retry.status,
-        duration: retry.duration,
-        error: retry.error,
-        error_stack: retry.error_stack,
-        errorStack: retry.error_stack,
-        screenshots: retry.screenshots || [],
-        attachments: retry.attachments || [],
-        started_at: retry.started_at,
-        startTime: retry.started_at,
-      })),
+    const response: TestDetailsResponse = {
+      test: {
+        id: test.id,
+        suite_test_id: test.suite_test_id ?? undefined,
+        name: test.suite_test?.name || "Unknown Test",
+        file: test.suite_test?.file || "unknown",
+        status: test.status as "passed" | "failed" | "flaky" | "skipped" | "timedOut",
+        duration: test.duration,
+        error: test.error ?? undefined,
+        screenshots: Array.isArray(test.screenshots) ? (test.screenshots as string[]) : [],
+        started_at: test.started_at ?? undefined,
+        attempts: (testAttempts || []).map((attempt) => ({
+          attemptIndex: attempt.retry_index,
+          retry_index: attempt.retry_index,
+          retryIndex: attempt.retry_index,
+          status: attempt.status,
+          duration: attempt.duration,
+          error: attempt.error ?? undefined,
+          error_stack: attempt.error_stack ?? undefined,
+          errorStack: attempt.error_stack ?? undefined,
+          screenshots: Array.isArray(attempt.screenshots) ? (attempt.screenshots as string[]) : [],
+          attachments: Array.isArray(attempt.attachments) ? (attempt.attachments as any[]) : [],
+          started_at: attempt.started_at ?? undefined,
+          startTime: attempt.started_at ?? undefined,
+        })),
+      },
     };
 
-    return NextResponse.json({ test: testCase });
+    return NextResponse.json(response);
+
   } catch (error) {
     console.error("[API] Error in test details endpoint:", error);
     return NextResponse.json(

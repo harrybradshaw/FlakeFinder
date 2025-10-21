@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { getOrganizationProjects } from "@/app/api/projects/route";
+import { type Database } from "@/types/supabase";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
@@ -56,12 +58,6 @@ export async function GET(request: NextRequest) {
       .from("organization_projects")
       .select("project_id, organization_id")
       .in("organization_id", userOrgIds);
-
-    console.log("[API] Organization projects query result:", {
-      data: orgProjects,
-      error: orgProjectsError,
-      userOrgIds,
-    });
 
     if (orgProjectsError) {
       console.error(
@@ -225,7 +221,10 @@ export async function GET(request: NextRequest) {
 
       if (testsError) {
         console.error("[API] Error fetching tests in suite:", testsError);
-        return NextResponse.json({ error: testsError.message }, { status: 500 });
+        return NextResponse.json(
+          { error: testsError.message },
+          { status: 500 },
+        );
       }
 
       const testRunIdsInSuite = [

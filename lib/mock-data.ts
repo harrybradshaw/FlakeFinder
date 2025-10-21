@@ -30,6 +30,35 @@ export interface TestRun {
     file: string;
     worker_index?: number;
     started_at?: string;
+    metadata?: {
+      browser?: string;
+      tags?: string[];
+      annotations?: any[];
+      epic?: string;
+      labels?: Array<{ name: string; value: string }>;
+      parameters?: Array<{ name: string; value: string }>;
+      description?: string;
+      descriptionHtml?: string;
+    };
+    // Unified attempts structure - all tests have attempts
+    // Passed tests: 1 attempt
+    // Failed tests: 1+ attempts (all failed)
+    // Flaky tests: 2+ attempts (at least one passed)
+    attempts?: Array<{
+      attemptIndex: number; // 0-based index
+      status: string;
+      duration: number;
+      error?: string;
+      errorStack?: string;
+      screenshots?: string[];
+      attachments?: Array<{
+        name: string;
+        contentType: string;
+        content: string;
+      }>;
+      startTime?: string;
+    }>;
+    // Legacy support - will be removed
     error?: string;
     screenshots?: string[];
     retryResults?: Array<{

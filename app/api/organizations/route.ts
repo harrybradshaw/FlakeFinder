@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { type Database } from "@/types/supabase";
 
 // Cached function to get user's organizations with details
 const getUserOrganizationsWithDetails = cache(async (userId: string) => {
@@ -9,7 +10,7 @@ const getUserOrganizationsWithDetails = cache(async (userId: string) => {
     return { organizations: [], error: null };
   }
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
@@ -57,7 +58,8 @@ export async function GET() {
     }
 
     // Get user's organization memberships (cached)
-    const { organizations, error: userOrgsError } = await getUserOrganizationsWithDetails(userId);
+    const { organizations, error: userOrgsError } =
+      await getUserOrganizationsWithDetails(userId);
 
     if (userOrgsError) {
       console.error("[API] Error fetching user organizations:", userOrgsError);

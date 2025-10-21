@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { headers } from "next/headers";
+import { type Database } from "@/types/supabase";
 
 // Cached function to get all active environments
 const getActiveEnvironments = cache(async () => {
@@ -10,7 +10,7 @@ const getActiveEnvironments = cache(async () => {
     return { environments: [], error: null };
   }
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );

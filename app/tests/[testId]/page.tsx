@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   Clock,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { TestCaseDetails } from "@/components/test-case-details";
@@ -39,29 +40,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-
-interface TestHistory {
-  testRunId: string;
-  timestamp: string;
-  status: string;
-  duration: number;
-  environment?: string;
-  trigger?: string;
-  branch?: string;
-}
-
-interface TestDetail {
-  name: string;
-  file: string;
-  history: TestHistory[];
-  summary: {
-    totalRuns: number;
-    passRate: string;
-    failRate: string;
-    flakyRate: string;
-    avgDuration: number;
-  };
-}
+import type { TestDetailsResponse, TestDetailResponse } from "@/types/api";
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -75,13 +54,22 @@ const fetcher = async (url: string) => {
 function TestRunDetails({
   testRunId,
   suiteTestId,
+  onTestLoaded,
 }: {
   testRunId: string;
   suiteTestId: string;
+  onTestLoaded?: (testId: string) => void;
 }) {
-  const { data, error, isLoading } = useSWR(
+  const { data, error, isLoading } = useSWR<TestDetailsResponse>(
     `/api/test-runs/${testRunId}/tests/${suiteTestId}`,
     fetcher,
+    {
+      onSuccess: (data) => {
+        if (data?.test?.id && onTestLoaded) {
+          onTestLoaded(data.test.id);
+        }
+      },
+    },
   );
 
   if (isLoading) {
@@ -105,22 +93,135 @@ function TestRunDetails({
 
   const testCase = data.test;
 
-  // Transform to match TestCaseDetails interface
+  // Transform to match TestCaseDetails interface with unified attempts structure
+  let attempts = [];
+
+  if (testCase.attempts) {
+    // New format: already has attempts
+    attempts = testCase.attempts;
+  } else if (testCase.retryResults && testCase.retryResults.length > 0) {
+    // Legacy format: convert retryResults to attempts
+    attempts = testCase.retryResults.map((retry: any) => ({
+      attemptIndex: retry.retry_index ?? retry.retryIndex ?? 0,
+      status: retry.status,
+      duration: retry.duration,
+      error: retry.error,
+      errorStack: retry.error_stack ?? retry.errorStack,
+      screenshots: retry.screenshots || [],
+      attachments: retry.attachments || [],
+      startTime: retry.started_at || retry.startTime,
+    }));
+  } else {
+    // No retries: create single attempt from test data
+    attempts = [
+      {
+        attemptIndex: 0,
+        status: testCase.status === "timedOut" ? "failed" : testCase.status,
+        duration: testCase.duration,
+        error: testCase.error,
+        errorStack: undefined,
+        screenshots: testCase.screenshots || [],
+        attachments: [],
+        startTime: testCase.started_at,
+      },
+    ];
+  }
+
   const testCaseForDetails = {
     id: testCase.id,
     name: testCase.name,
     file: testCase.file,
     status: testCase.status === "timedOut" ? "failed" : testCase.status,
     duration: `${(testCase.duration / 1000).toFixed(2)}s`,
-    error: testCase.error,
-    screenshots: testCase.screenshots?.map((url: string, idx: number) => ({
-      name: `screenshot-${idx + 1}.png`,
-      url,
-    })),
-    retryResults: testCase.retryResults,
+    attempts,
   };
 
   return <TestCaseDetails testCase={testCaseForDetails} />;
+}
+
+// Wrapper component to manage test ID state
+function TestHistoryItem({
+  item,
+  suiteTestId,
+}: {
+  item: any;
+  suiteTestId: string;
+}) {
+  const [loadedTestId, setLoadedTestId] = useState<string | null>(null);
+
+  return (
+    <AccordionItem
+      key={item.testRunId}
+      value={`run-${item.testRunId}`}
+      className="border-border"
+    >
+      <AccordionTrigger className="hover:no-underline py-3">
+        <div className="flex items-center justify-between w-full pr-4">
+          <div className="flex items-center gap-3">
+            {item.status === "passed" && (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            )}
+            {item.status === "failed" && (
+              <XCircle className="h-4 w-4 text-red-500" />
+            )}
+            {item.status === "flaky" && (
+              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            )}
+            {item.status === "skipped" && (
+              <Clock className="h-4 w-4 text-gray-500" />
+            )}
+
+            <div className="text-left">
+              <p className="text-sm font-medium">
+                {new Date(item.timestamp).toLocaleString()}
+              </p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {item.branch && <span>{item.branch}</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-sm text-muted-foreground">
+            {(item.duration / 1000).toFixed(2)}s
+          </div>
+        </div>
+      </AccordionTrigger>
+      <AccordionContent>
+        <TestRunDetails
+          testRunId={item.testRunId}
+          suiteTestId={suiteTestId}
+          onTestLoaded={setLoadedTestId}
+        />
+        {/* Test Run Summary */}
+        <div className="pl-7 pt-3 flex items-center justify-between">
+          <div className="flex items-center gap-3 text-sm">
+            {item.environment && (
+              <Badge variant="outline" className="text-xs">
+                {item.environment}
+              </Badge>
+            )}
+            {item.trigger && (
+              <Badge variant="secondary" className="text-xs">
+                {item.trigger}
+              </Badge>
+            )}
+          </div>
+          <Link
+            href={
+              loadedTestId
+                ? `/runs/${item.testRunId}?testId=${loadedTestId}`
+                : `/runs/${item.testRunId}`
+            }
+          >
+            <Button size="sm" variant="default">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              View Test Run
+            </Button>
+          </Link>
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  );
 }
 
 export default function TestDetailPage({
@@ -134,8 +235,8 @@ export default function TestDetailPage({
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("30d");
 
   // Fetch environments and triggers dynamically
-  const { data: environmentsData } = useSWR("/api/environments", fetcher);
-  const { data: triggersData } = useSWR("/api/triggers", fetcher);
+  const { data: environmentsData } = useSWR<{ environments: any[] }>("/api/environments", fetcher);
+  const { data: triggersData } = useSWR<{ triggers: any[] }>("/api/triggers", fetcher);
 
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
@@ -161,7 +262,7 @@ export default function TestDetailPage({
     selectedTimeRange,
   ]);
 
-  const { data, error, isLoading } = useSWR<TestDetail>(apiUrl, fetcher, {
+  const { data, error, isLoading } = useSWR<TestDetailResponse>(apiUrl, fetcher, {
     refreshInterval: 60000,
     revalidateOnFocus: true,
   });
@@ -423,59 +524,11 @@ export default function TestDetailPage({
                   .reverse()
                   .slice(0, 20)
                   .map((item, idx) => (
-                    <AccordionItem
+                    <TestHistoryItem
                       key={idx}
-                      value={`run-${idx}`}
-                      className="border-border"
-                    >
-                      <AccordionTrigger className="hover:no-underline py-3">
-                        <div className="flex items-center justify-between w-full pr-4">
-                          <div className="flex items-center gap-3">
-                            {item.status === "passed" && (
-                              <CheckCircle2 className="h-4 w-4 text-green-500" />
-                            )}
-                            {item.status === "failed" && (
-                              <XCircle className="h-4 w-4 text-red-500" />
-                            )}
-                            {item.status === "flaky" && (
-                              <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                            )}
-                            {item.status === "skipped" && (
-                              <Clock className="h-4 w-4 text-gray-500" />
-                            )}
-
-                            <div className="text-left">
-                              <p className="text-sm font-medium">
-                                {new Date(item.timestamp).toLocaleString()}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                {item.environment && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {item.environment}
-                                  </Badge>
-                                )}
-                                {item.trigger && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {item.trigger}
-                                  </Badge>
-                                )}
-                                {item.branch && <span>{item.branch}</span>}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="text-sm text-muted-foreground">
-                            {(item.duration / 1000).toFixed(2)}s
-                          </div>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <TestRunDetails
-                          testRunId={item.testRunId}
-                          suiteTestId={resolvedParams.testId}
-                        />
-                      </AccordionContent>
-                    </AccordionItem>
+                      item={item}
+                      suiteTestId={resolvedParams.testId}
+                    />
                   ))}
               </Accordion>
             </Card>

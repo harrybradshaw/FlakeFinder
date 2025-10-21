@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 
 // Cached function to get user's organization IDs
 const getUserOrganizations = cache(async (userId: string) => {
@@ -9,7 +10,7 @@ const getUserOrganizations = cache(async (userId: string) => {
     return { userOrgIds: [], error: null };
   }
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
@@ -28,12 +29,12 @@ const getUserOrganizations = cache(async (userId: string) => {
 });
 
 // Cached function to get organization projects
-const getOrganizationProjects = cache(async (userOrgIds: string[]) => {
+export const getOrganizationProjects = cache(async (userOrgIds: string[]) => {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     return { projectIds: [], error: null };
   }
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
@@ -57,7 +58,7 @@ const getProjectDetails = cache(async (projectIds: string[]) => {
     return { projects: [], error: null };
   }
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
@@ -76,7 +77,7 @@ const getProjectDetails = cache(async (projectIds: string[]) => {
   return { projects: data || [], error: null };
 });
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       console.log("[API] Supabase not configured, returning empty array");
@@ -84,16 +85,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's organization memberships from Clerk
-    const { userId, orgId, orgSlug } = await auth();
-    console.log("[API] User ID:", userId);
-
+    const { userId } = await auth();
     if (!userId) {
       console.log("[API] User not authenticated");
       return NextResponse.json({ projects: [] });
     }
 
     // Get user's custom organization memberships (cached)
-    const { userOrgIds, error: userOrgsError } = await getUserOrganizations(userId);
+    const { userOrgIds, error: userOrgsError } =
+      await getUserOrganizations(userId);
 
     if (userOrgsError) {
       console.error("[API] Error fetching user organizations:", userOrgsError);
@@ -111,13 +111,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Query projects that belong to user's organizations (cached)
-    const { projectIds, error: orgProjectsError } = await getOrganizationProjects(userOrgIds);
-
-    console.log("[API] Organization projects query result:", {
-      projectIds,
-      error: orgProjectsError,
-      userOrgIds,
-    });
+    const { projectIds, error: orgProjectsError } =
+      await getOrganizationProjects(userOrgIds);
 
     if (orgProjectsError) {
       console.error(
@@ -196,7 +191,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );

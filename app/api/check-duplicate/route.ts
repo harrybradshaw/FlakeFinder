@@ -1,14 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { 
+import {
   processPlaywrightReportFile,
   ReportProcessingError,
   calculateContentHash,
-  type TestResult 
+  type TestResult,
 } from "@/lib/playwright-report-utils";
+import { type Database } from "@/types/supabase";
 
 // Configure route to accept larger payloads (up to 100MB)
 export const maxDuration = 60; // 60 seconds timeout
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 interface DuplicateCheckResult {
   success: boolean;
@@ -30,7 +31,7 @@ interface DuplicateCheckResult {
 
 /**
  * POST /api/check-duplicate
- * 
+ *
  * Checks for duplicate test runs by processing the uploaded test report
  * and comparing it with existing runs in the database.
  */
@@ -50,13 +51,13 @@ export async function POST(request: NextRequest) {
         !file && "file",
         !environment && "environment",
         !trigger && "trigger",
-        !branch && "branch"
+        !branch && "branch",
       ].filter(Boolean);
-      
+
       return NextResponse.json(
-        { 
+        {
           error: "Missing required fields",
-          details: `Missing: ${missingFields.join(", ")}`
+          details: `Missing: ${missingFields.join(", ")}`,
         },
         { status: 400 },
       );
@@ -69,7 +70,10 @@ export async function POST(request: NextRequest) {
     // If hash was pre-calculated (from optimized upload), use it
     // Otherwise calculate from the file
     if (preCalculatedHash) {
-      console.log("[Duplicate Check] Using pre-calculated hash:", preCalculatedHash);
+      console.log(
+        "[Duplicate Check] Using pre-calculated hash:",
+        preCalculatedHash,
+      );
       contentHash = preCalculatedHash;
       // Still need to process file to get test count for response
       const processed = await processPlaywrightReportFile(file);
@@ -81,20 +85,20 @@ export async function POST(request: NextRequest) {
       const processed = await processPlaywrightReportFile(file);
       tests = processed.tests;
       metadata = processed.metadata;
-      
+
       if (tests.length === 0) {
         return NextResponse.json(
           { error: "No tests found in the uploaded report" },
-          { status: 400 }
+          { status: 400 },
         );
       }
-      
+
       contentHash = await calculateContentHash(tests);
     }
 
     // Check for duplicates in the database
     const duplicateCheck = await checkForDuplicateRun(contentHash);
-    
+
     const result: DuplicateCheckResult = {
       success: true,
       testCount: tests.length,
@@ -105,8 +109,8 @@ export async function POST(request: NextRequest) {
         trigger,
         branch,
         commit,
-        ...metadata
-      }
+        ...metadata,
+      },
     };
 
     if (duplicateCheck.existingRun) {
@@ -114,31 +118,29 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(result);
-    
   } catch (error) {
     console.error("Error processing duplicate check:", error);
-    
+
     if (error instanceof ReportProcessingError) {
       return NextResponse.json(
-        { 
+        {
           error: "Failed to process test report",
           details: error.message,
-          code: error.code
+          code: error.code,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
-    
+
     return NextResponse.json(
-      { 
+      {
         error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error"
+        details: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
-
 
 /**
  * Checks if a test run with the given hash already exists in the database
@@ -157,7 +159,7 @@ async function checkForDuplicateRun(contentHash: string): Promise<{
 
   try {
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );

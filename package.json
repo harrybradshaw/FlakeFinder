@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "lint": "eslint .",
     "start": "next start",
     "test": "vitest",
@@ -83,6 +83,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "3.2.4",
     "@vitest/ui": "^3.2.4",
     "dotenv-cli": "^10.0.0",
     "eslint": "^9.38.0",

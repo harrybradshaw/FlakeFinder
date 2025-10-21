@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { TestRun } from "./mock-data";
+import { type Database } from "@/types/supabase";
 
 function formatDuration(ms: number): string {
   const minutes = Math.floor(ms / 60000);
@@ -18,9 +19,9 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
     throw new Error("Database not configured");
   }
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
+    process.env.SUPABASE_ANON_KEY,
   );
 
   // Fetch test run with joined project, environment and trigger
@@ -32,7 +33,7 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
       project:projects(name, display_name, color),
       environment:environments(name, display_name, color),
       trigger:test_triggers(name, display_name, icon)
-    `
+    `,
     )
     .eq("id", id)
     .single();
@@ -51,7 +52,7 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
       `
       *,
       suite_test:suite_tests(id, name, file)
-    `
+    `,
     )
     .eq("test_run_id", id)
     .order("created_at", { ascending: true });
@@ -60,27 +61,27 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
     throw new Error(`Error fetching tests: ${testsError.message}`);
   }
 
-  // Fetch retry results for all tests
+  // Fetch test attempts (including retries) for all tests
   const testIds = tests.map((t) => t.id);
 
-  const { data: retryResults, error: retryError } = await supabase
+  const { data: testAttempts, error: attemptsError } = await supabase
     .from("test_results")
     .select("*")
     .in("test_id", testIds)
     .order("retry_index", { ascending: true });
 
-  if (retryError) {
-    console.error("[getTestRunById] Error fetching retry results:", retryError);
+  if (attemptsError) {
+    console.error("[getTestRunById] Error fetching test attempts:", attemptsError);
   }
 
-  // Group retry results by test_id
-  const retryResultsByTestId = new Map();
-  if (retryResults && retryResults.length > 0) {
-    for (const result of retryResults) {
-      if (!retryResultsByTestId.has(result.test_id)) {
-        retryResultsByTestId.set(result.test_id, []);
+  // Group test attempts by test_id
+  const attemptsByTestId = new Map();
+  if (testAttempts && testAttempts.length > 0) {
+    for (const attempt of testAttempts) {
+      if (!attemptsByTestId.has(attempt.test_id)) {
+        attemptsByTestId.set(attempt.test_id, []);
       }
-      retryResultsByTestId.get(result.test_id).push(result);
+      attemptsByTestId.get(attempt.test_id).push(attempt);
     }
   }
 
@@ -88,11 +89,13 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
   return {
     id: testRun.id,
     timestamp: testRun.timestamp,
-    project: (testRun as any).project?.name || "default",
-    project_display: (testRun as any).project?.display_name || "Default Project",
-    project_color: (testRun as any).project?.color || "#3b82f6",
+    project: (testRun).project?.name || "default",
+    project_display:
+      (testRun).project?.display_name || "Default Project",
+    project_color: (testRun).project?.color || "#3b82f6",
     environment: (testRun as any).environment?.name || "unknown",
-    environment_display: (testRun as any).environment?.display_name || "Unknown",
+    environment_display:
+      (testRun as any).environment?.display_name || "Unknown",
     environment_color: (testRun as any).environment?.color || "#3b82f6",
     trigger: (testRun as any).trigger?.name || "unknown",
     trigger_display: (testRun as any).trigger?.display_name || "Unknown",
@@ -105,19 +108,34 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
     flaky: testRun.flaky,
     skipped: testRun.skipped,
     duration: formatDuration(testRun.duration),
-    ci_metadata: testRun.ci_metadata || {},
+    ci_metadata: (typeof testRun.ci_metadata === 'object' && testRun.ci_metadata !== null && !Array.isArray(testRun.ci_metadata)) ? (testRun.ci_metadata as Record<string, any>) : {},
     tests: tests.map((test) => ({
       id: test.id,
-      suite_test_id: test.suite_test_id,
-      name: (test as any).suite_test?.name || "Unknown Test",
-      file: (test as any).suite_test?.file || "unknown",
-      status: test.status as "passed" | "failed" | "flaky" | "skipped" | "timedOut",
+      suite_test_id: test.suite_test_id ?? undefined,
+      name: test.suite_test?.name || "Unknown Test",
+      file: test.suite_test?.file || "unknown",
+      status: test.status as
+        | "passed"
+        | "failed"
+        | "flaky"
+        | "skipped"
+        | "timedOut",
       duration: test.duration,
-      worker_index: test.worker_index,
-      started_at: test.started_at,
-      error: test.error,
-      screenshots: test.screenshots || [],
-      retryResults: retryResultsByTestId.get(test.id) || [],
+      worker_index: test.worker_index ?? undefined,
+      started_at: test.started_at ?? undefined,
+      error: test.error ?? undefined,
+      screenshots: Array.isArray(test.screenshots) ? (test.screenshots as string[]) : [],
+      metadata: (typeof test.metadata === 'object' && test.metadata !== null && !Array.isArray(test.metadata)) ? test.metadata : undefined,
+      attempts: (attemptsByTestId.get(test.id) || []).map((attempt: any) => ({
+        attemptIndex: attempt.retry_index,
+        status: attempt.status,
+        duration: attempt.duration,
+        error: attempt.error,
+        errorStack: attempt.error_stack,
+        screenshots: Array.isArray(attempt.screenshots) ? attempt.screenshots : [],
+        attachments: Array.isArray(attempt.attachments) ? attempt.attachments : [],
+        startTime: attempt.started_at,
+      })),
     })),
   };
 }
@@ -130,15 +148,15 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
  */
 export async function getTestRun(
   id: string,
-  userId: string
+  userId: string,
 ): Promise<TestRun | null> {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     throw new Error("Database not configured");
   }
 
-  const supabase = createClient(
+  const supabase = createClient<Database>(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY
+    process.env.SUPABASE_ANON_KEY,
   );
 
   // Get user's custom organization memberships
@@ -148,7 +166,9 @@ export async function getTestRun(
     .eq("user_id", userId);
 
   if (userOrgsError) {
-    throw new Error(`Error fetching user organizations: ${userOrgsError.message}`);
+    throw new Error(
+      `Error fetching user organizations: ${userOrgsError.message}`,
+    );
   }
 
   const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
@@ -164,7 +184,9 @@ export async function getTestRun(
     .in("organization_id", userOrgIds);
 
   if (orgProjectsError) {
-    throw new Error(`Error fetching organization projects: ${orgProjectsError.message}`);
+    throw new Error(
+      `Error fetching organization projects: ${orgProjectsError.message}`,
+    );
   }
 
   const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || [];
@@ -182,7 +204,7 @@ export async function getTestRun(
       project:projects(name, display_name, color),
       environment:environments(name, display_name, color),
       trigger:test_triggers(name, display_name, icon)
-    `
+    `,
     )
     .eq("id", id)
     .single();
@@ -206,7 +228,7 @@ export async function getTestRun(
       `
       *,
       suite_test:suite_tests(id, name, file)
-    `
+    `,
     )
     .eq("test_run_id", id)
     .order("created_at", { ascending: true });
@@ -215,28 +237,30 @@ export async function getTestRun(
     throw new Error(`Error fetching tests: ${testsError.message}`);
   }
 
-  // Fetch retry results for all tests
+  // Fetch test attempts (including retries) for all tests
   const testIds = tests.map((t) => t.id);
 
-  const { data: retryResults, error: retryError } = await supabase
+  const { data: testAttempts, error: attemptsError } = await supabase
     .from("test_results")
     .select("*")
     .in("test_id", testIds)
     .order("retry_index", { ascending: true });
 
-  if (retryError) {
-    console.error("[getTestRun] Error fetching retry results:", retryError);
-    // Don't fail the request, just log the error
+  if (attemptsError) {
+    console.error(
+      "[getTestRunByIdWithAuth] Error fetching test attempts:",
+      attemptsError,
+    );
   }
 
-  // Group retry results by test_id
-  const retryResultsByTestId = new Map();
-  if (retryResults && retryResults.length > 0) {
-    for (const result of retryResults) {
-      if (!retryResultsByTestId.has(result.test_id)) {
-        retryResultsByTestId.set(result.test_id, []);
+  // Group test attempts by test_id
+  const attemptsByTestId = new Map();
+  if (testAttempts && testAttempts.length > 0) {
+    for (const attempt of testAttempts) {
+      if (!attemptsByTestId.has(attempt.test_id)) {
+        attemptsByTestId.set(attempt.test_id, []);
       }
-      retryResultsByTestId.get(result.test_id).push(result);
+      attemptsByTestId.get(attempt.test_id).push(attempt);
     }
   }
 
@@ -245,10 +269,12 @@ export async function getTestRun(
     id: testRun.id,
     timestamp: testRun.timestamp,
     project: (testRun as any).project?.name || "default",
-    project_display: (testRun as any).project?.display_name || "Default Project",
+    project_display:
+      (testRun as any).project?.display_name || "Default Project",
     project_color: (testRun as any).project?.color || "#3b82f6",
     environment: (testRun as any).environment?.name || "unknown",
-    environment_display: (testRun as any).environment?.display_name || "Unknown",
+    environment_display:
+      (testRun as any).environment?.display_name || "Unknown",
     environment_color: (testRun as any).environment?.color || "#3b82f6",
     trigger: (testRun as any).trigger?.name || "unknown",
     trigger_display: (testRun as any).trigger?.display_name || "Unknown",
@@ -261,19 +287,34 @@ export async function getTestRun(
     flaky: testRun.flaky,
     skipped: testRun.skipped,
     duration: formatDuration(testRun.duration),
-    ci_metadata: testRun.ci_metadata || {},
+    ci_metadata: (typeof testRun.ci_metadata === 'object' && testRun.ci_metadata !== null && !Array.isArray(testRun.ci_metadata)) ? (testRun.ci_metadata as Record<string, any>) : {},
     tests: tests.map((test) => ({
       id: test.id,
-      suite_test_id: test.suite_test_id,
-      name: (test as any).suite_test?.name || "Unknown Test",
-      file: (test as any).suite_test?.file || "unknown",
-      status: test.status,
+      suite_test_id: test.suite_test_id ?? undefined,
+      name: test.suite_test?.name || "Unknown Test",
+      file: test.suite_test?.file || "unknown",
+      status: test.status as
+        | "passed"
+        | "failed"
+        | "flaky"
+        | "skipped"
+        | "timedOut",
       duration: test.duration,
-      worker_index: test.worker_index,
-      started_at: test.started_at,
-      error: test.error,
-      screenshots: test.screenshots || [],
-      retryResults: retryResultsByTestId.get(test.id) || [],
+      worker_index: test.worker_index ?? undefined,
+      started_at: test.started_at ?? undefined,
+      error: test.error ?? undefined,
+      screenshots: Array.isArray(test.screenshots) ? (test.screenshots as string[]) : [],
+      metadata: (typeof test.metadata === 'object' && test.metadata !== null && !Array.isArray(test.metadata)) ? test.metadata : undefined,
+      attempts: (attemptsByTestId.get(test.id) || []).map((attempt: any) => ({
+        attemptIndex: attempt.retry_index,
+        status: attempt.status,
+        duration: attempt.duration,
+        error: attempt.error,
+        errorStack: attempt.error_stack,
+        screenshots: Array.isArray(attempt.screenshots) ? attempt.screenshots : [],
+        attachments: Array.isArray(attempt.attachments) ? attempt.attachments : [],
+        startTime: attempt.started_at,
+      })),
     })),
   };
 }

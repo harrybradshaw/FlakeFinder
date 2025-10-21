@@ -142,7 +142,8 @@ export default function TestsPage() {
     if (statuses.length < 3)
       return <Minus className="h-4 w-4 text-muted-foreground" />;
 
-    const recent = statuses.slice(-3);
+    // Get the 3 most recent statuses (array is sorted descending, newest first)
+    const recent = statuses.slice(0, 3);
     const passCount = recent.filter((s) => s === "passed").length;
 
     if (passCount === 3)
@@ -311,7 +312,7 @@ export default function TestsPage() {
                             <span className="text-xs text-muted-foreground mr-2">
                               Recent:
                             </span>
-                            {test.recentStatuses.slice(-10).map((status, i) => (
+                            {test.recentStatuses.map((status, i) => (
                               <div
                                 key={i}
                                 className={`h-2 w-2 rounded-full ${

@@ -1,4 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
+import {
+  aggregateTestMetrics,
+  transformTestMetrics,
+  sortTestsByHealth,
+} from "@/lib/test-aggregation-utils";
+import { type Database } from "@/types/supabase";
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +19,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
+    const supabase = createClient<Database>(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
@@ -96,10 +102,12 @@ export async function GET(request: NextRequest) {
         status,
         duration,
         test_run_id,
+        started_at,
         suite_test:suite_tests(id, name, file)
       `,
       )
-      .in("test_run_id", runIds);
+      .in("test_run_id", runIds)
+      .order("started_at", { ascending: false });
 
     if (testsError) {
       console.error("[API] Error fetching tests:", testsError);
@@ -107,104 +115,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Aggregate metrics by suite_test_id (canonical test identifier)
-    const testMetrics = new Map<
-      string,
-      {
-        suite_test_id: string;
-        name: string;
-        file: string;
-        totalRuns: number;
-        passed: number;
-        failed: number;
-        flaky: number;
-        skipped: number;
-        totalDuration: number;
-        recentStatuses: string[];
-      }
-    >();
-
-    for (const test of tests || []) {
-      const suiteTestId = test.suite_test_id;
-      const suiteTest = (test as any).suite_test;
-
-      // Skip tests without suite_test reference (shouldn't happen with proper migration)
-      if (!suiteTestId || !suiteTest) {
-        console.warn("[API] Test without suite_test reference:", test);
-        continue;
-      }
-
-      if (!testMetrics.has(suiteTestId)) {
-        testMetrics.set(suiteTestId, {
-          suite_test_id: suiteTestId,
-          name: suiteTest.name,
-          file: suiteTest.file,
-          totalRuns: 0,
-          passed: 0,
-          failed: 0,
-          flaky: 0,
-          skipped: 0,
-          totalDuration: 0,
-          recentStatuses: [],
-        });
-      }
-
-      const metrics = testMetrics.get(suiteTestId)!;
-      metrics.totalRuns++;
-      metrics.totalDuration += test.duration || 0;
-
-      // Track status counts
-      switch (test.status) {
-        case "passed":
-          metrics.passed++;
-          break;
-        case "failed":
-          metrics.failed++;
-          break;
-        case "flaky":
-          metrics.flaky++;
-          break;
-        case "skipped":
-          metrics.skipped++;
-          break;
-      }
-
-      // Keep last 10 statuses for trend
-      metrics.recentStatuses.push(test.status);
-      if (metrics.recentStatuses.length > 10) {
-        metrics.recentStatuses.shift();
-      }
-    }
+    const testMetrics = aggregateTestMetrics(
+      (tests || []).map((test) => ({
+        suite_test_id: test.suite_test_id!,
+        status: test.status,
+        duration: test.duration,
+        test_run_id: test.test_run_id,
+        started_at: test.started_at!,
+        suite_test: test.suite_test,
+      })),
+    );
 
     // Transform to response format
-    const testsResponse = Array.from(testMetrics.values()).map((metrics) => ({
-      suite_test_id: metrics.suite_test_id,
-      name: metrics.name,
-      file: metrics.file,
-      totalRuns: metrics.totalRuns,
-      passRate:
-        metrics.totalRuns > 0
-          ? ((metrics.passed / metrics.totalRuns) * 100).toFixed(1)
-          : "0.0",
-      failRate:
-        metrics.totalRuns > 0
-          ? ((metrics.failed / metrics.totalRuns) * 100).toFixed(1)
-          : "0.0",
-      flakyRate:
-        metrics.totalRuns > 0
-          ? ((metrics.flaky / metrics.totalRuns) * 100).toFixed(1)
-          : "0.0",
-      avgDuration:
-        metrics.totalRuns > 0
-          ? Math.round(metrics.totalDuration / metrics.totalRuns)
-          : 0,
-      recentStatuses: metrics.recentStatuses,
-      health: calculateHealth(metrics),
-    }));
+    const testsResponse = Array.from(testMetrics.values()).map(
+      transformTestMetrics,
+    );
 
     // Sort by health (worst first)
-    testsResponse.sort((a, b) => a.health - b.health);
+    const sortedTests = sortTestsByHealth(testsResponse);
 
-    return NextResponse.json({ tests: testsResponse });
+    return NextResponse.json({ tests: sortedTests });
   } catch (error) {
     console.error("[API] Error aggregating tests:", error);
     return NextResponse.json(
@@ -215,21 +145,4 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-function calculateHealth(metrics: {
-  totalRuns: number;
-  passed: number;
-  failed: number;
-  flaky: number;
-}): number {
-  if (metrics.totalRuns === 0) return 100;
-
-  const passRate = (metrics.passed / metrics.totalRuns) * 100;
-  const failRate = (metrics.failed / metrics.totalRuns) * 100;
-  const flakyRate = (metrics.flaky / metrics.totalRuns) * 100;
-
-  // Health score: 100 = perfect, 0 = terrible
-  // Penalize failures more than flakiness
-  return Math.max(0, 100 - failRate * 2 - flakyRate);
 }

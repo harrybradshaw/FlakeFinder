@@ -61,7 +61,6 @@ export function TimelineView({ tests, onTestSelect }: TimelineViewProps) {
 
     timedTests.forEach((test) => {
       const testStart = new Date(test.started_at!).getTime();
-      const testEnd = testStart + test.durationMs!;
       const originalId = test.originalTestId || test.id;
 
       let assignedLane = -1;

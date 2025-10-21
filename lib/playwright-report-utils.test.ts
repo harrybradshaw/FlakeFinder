@@ -53,11 +53,11 @@ describe('playwright-report-utils', () => {
       
       if (flakyTests.length > 0) {
         const flakyTest = flakyTests[0];
-        expect(flakyTest.retryResults).toBeDefined();
-        expect(Array.isArray(flakyTest.retryResults)).toBe(true);
+        expect(flakyTest.attempts).toBeDefined();
+        expect(Array.isArray(flakyTest.attempts)).toBe(true);
         
-        if (flakyTest.retryResults && flakyTest.retryResults.length > 0) {
-          const retry = flakyTest.retryResults[0];
+        if (flakyTest.attempts && flakyTest.attempts.length > 0) {
+          const retry = flakyTest.attempts[0];
           expect(retry).toHaveProperty('retryIndex');
           expect(retry).toHaveProperty('status');
           expect(retry).toHaveProperty('duration');
@@ -138,12 +138,12 @@ describe('playwright-report-utils', () => {
       const result = await processPlaywrightReportFile(testReportFile);
       
       const testsWithRetries = result.tests.filter(
-        t => t.retryResults && t.retryResults.length > 0
+        t => t.attempts && t.attempts.length > 0
       );
       
       if (testsWithRetries.length > 0) {
         const test = testsWithRetries[0];
-        const retry = test.retryResults![0];
+        const retry = test.attempts![0];
         
         expect(retry).toHaveProperty('screenshots');
         expect(Array.isArray(retry.screenshots)).toBe(true);
@@ -169,19 +169,21 @@ describe('playwright-report-utils', () => {
       await expect(processPlaywrightReportFile(invalidFile)).rejects.toThrow();
     });
 
-    it('should handle empty test reports gracefully', async () => {
-      // Create a minimal valid ZIP with no tests
+    it('should handle invalid report format', async () => {
+      // Create a ZIP with invalid structure (no index.html or report.json)
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       zip.file('empty.json', JSON.stringify({ tests: [] }));
       
       const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-      const emptyFile = new File([buffer], 'empty.zip', {
+      const invalidFile = new File([buffer], 'invalid.zip', {
         type: 'application/zip',
       });
 
-      const result = await processPlaywrightReportFile(emptyFile);
-      expect(result.tests).toEqual([]);
+      // Should throw error for invalid format
+      await expect(processPlaywrightReportFile(invalidFile)).rejects.toThrow(
+        'No report.json found in ZIP'
+      );
     });
   });
 
@@ -207,8 +209,8 @@ describe('playwright-report-utils', () => {
           expect(typeof test.errorStack).toBe('string');
         }
         
-        if (test.retryResults !== undefined) {
-          expect(Array.isArray(test.retryResults)).toBe(true);
+        if (test.attempts !== undefined) {
+          expect(Array.isArray(test.attempts)).toBe(true);
         }
         
         if (test.worker_index !== undefined) {
@@ -231,8 +233,8 @@ describe('playwright-report-utils', () => {
         const flakyTest = flakyTests[0];
         
         // If test has retry results, duration should be sum of all attempts
-        if (flakyTest.retryResults && flakyTest.retryResults.length > 0) {
-          const sumOfRetries = flakyTest.retryResults.reduce(
+        if (flakyTest.attempts && flakyTest.attempts.length > 0) {
+          const sumOfRetries = flakyTest.attempts.reduce(
             (sum, retry) => sum + retry.duration,
             0
           );
@@ -240,7 +242,7 @@ describe('playwright-report-utils', () => {
           console.log('Flaky test:', flakyTest.name);
           console.log('Test duration:', flakyTest.duration);
           console.log('Sum of retry durations:', sumOfRetries);
-          console.log('Number of retries:', flakyTest.retryResults.length);
+          console.log('Number of retries:', flakyTest.attempts.length);
           
           // Duration should equal the sum of all retry attempts
           expect(flakyTest.duration).toBe(sumOfRetries);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,17 @@ import type { TestRun } from "@/lib/mock-data";
 import { TimelineView } from "@/components/timeline-view";
 import { TestCaseDetails } from "@/components/test-case-details";
 
+interface TestAttempt {
+  attemptIndex: number;
+  status: string;
+  duration: number;
+  error?: string;
+  errorStack?: string;
+  screenshots?: string[];
+  attachments?: Array<{ name: string; contentType: string; content: string }>;
+  startTime?: string;
+}
+
 interface TestCase {
   id?: string; // UUID - primary key from tests table (this specific execution instance)
   suite_test_id?: string; // UUID - foreign key to suite_tests table (the canonical test definition)
@@ -43,19 +55,18 @@ interface TestCase {
   status: "passed" | "failed" | "flaky" | "skipped";
   duration: string;
   browser?: string;
-  error?: string;
-  retries?: number;
-  screenshots?: Array<{ name: string; url: string }>;
-  retryResults?: Array<{
-    retryIndex: number;
-    status: string;
-    duration: number;
-    error?: string;
-    errorStack?: string;
-    screenshots?: string[];
-    attachments?: Array<{ name: string; contentType: string; content: string }>;
-    startTime?: string;
-  }>;
+  metadata?: {
+    browser?: string;
+    tags?: string[];
+    annotations?: any[];
+    epic?: string;
+    labels?: Array<{ name: string; value: string }>;
+    parameters?: Array<{ name: string; value: string }>;
+    description?: string;
+    descriptionHtml?: string;
+  };
+  // Unified attempts structure
+  attempts: TestAttempt[];
   // Raw data for timeline
   worker_index?: number | null;
   started_at?: string | null;
@@ -72,20 +83,72 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
+// Generate a consistent color for a given string
+function getColorForEpic(epic: string): string {
+  // Simple hash function
+  let hash = 0;
+  for (let i = 0; i < epic.length; i++) {
+    hash = epic.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  // Define a palette of distinct, visually appealing colors
+  const colors = [
+    "bg-purple-500 hover:bg-purple-600",
+    "bg-blue-500 hover:bg-blue-600",
+    "bg-green-500 hover:bg-green-600",
+    "bg-yellow-500 hover:bg-yellow-600",
+    "bg-pink-500 hover:bg-pink-600",
+    "bg-indigo-500 hover:bg-indigo-600",
+    "bg-red-500 hover:bg-red-600",
+    "bg-teal-500 hover:bg-teal-600",
+    "bg-orange-500 hover:bg-orange-600",
+    "bg-cyan-500 hover:bg-cyan-600",
+  ];
+
+  // Use hash to select a color consistently
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+}
+
 export function TestDetailsView({ testRun }: TestDetailsViewProps) {
+  const searchParams = useSearchParams();
+  const testIdFromUrl = searchParams.get("testId");
+
   const passRate = ((testRun.passed / testRun.total) * 100).toFixed(1);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("status");
   const [activeTab, setActiveTab] = useState<string>("tests");
-  const [expandedTestId, setExpandedTestId] = useState<string | null>(null);
+  const [expandedTestId, setExpandedTestId] = useState<string | null>(
+    testIdFromUrl,
+  );
+
+  // Update expanded test when URL param changes
+  useEffect(() => {
+    if (testIdFromUrl) {
+      // Scroll to the test after a short delay to ensure accordion is rendered
+      setTimeout(() => {
+        const element = document.getElementById(`test-${testIdFromUrl}`);
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+    }
+  }, [testIdFromUrl]);
 
   // Filter and sort tests
   const [testCases, allTestCases] = useMemo(() => {
     const allTestCases: TestCase[] =
       testRun.tests?.map((test) => {
-        const retries =
-          test.retryResults?.map((retry) => ({
-            retryIndex: retry.retry_index ?? retry.retryIndex ?? 0,
+        // Convert to unified attempts structure
+        let attempts: TestAttempt[] = [];
+
+        if (test.attempts) {
+          // New format: already has attempts
+          attempts = test.attempts;
+        } else if (test.retryResults && test.retryResults.length > 0) {
+          // Legacy format: convert retryResults to attempts
+          attempts = test.retryResults.map((retry) => ({
+            attemptIndex: retry.retry_index ?? retry.retryIndex ?? 0,
             status: retry.status,
             duration: retry.duration,
             error: retry.error,
@@ -93,7 +156,22 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
             screenshots: retry.screenshots || [],
             attachments: retry.attachments || [],
             startTime: retry.started_at || retry.startTime,
-          })) || [];
+          }));
+        } else {
+          // No retries: create single attempt from test data
+          attempts = [
+            {
+              attemptIndex: 0,
+              status: test.status,
+              duration: test.duration,
+              error: test.error,
+              errorStack: undefined,
+              screenshots: test.screenshots || [],
+              attachments: [], // Will be populated from test.attachments if available
+              startTime: test.started_at,
+            },
+          ];
+        }
 
         return {
           id: test.id,
@@ -105,12 +183,8 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
               ? "failed"
               : (test.status as "passed" | "failed" | "flaky" | "skipped"),
           duration: formatDuration(test.duration),
-          error: test.error,
-          screenshots: test.screenshots?.map((url, idx) => ({
-            name: `screenshot-${idx + 1}.png`,
-            url,
-          })),
-          retryResults: retries,
+          metadata: test.metadata,
+          attempts,
           // Raw data for timeline
           worker_index: test.worker_index,
           started_at: test.started_at,
@@ -197,13 +271,13 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
               </div>
 
               {/* CI Metadata Links */}
-              {(testRun as any).ci_metadata &&
-                ((testRun as any).ci_metadata.commitHref ||
-                  (testRun as any).ci_metadata.buildHref) && (
+              {testRun.ci_metadata &&
+                (testRun.ci_metadata.commitHref ||
+                  testRun.ci_metadata.buildHref) && (
                   <div className="flex items-center gap-3 mt-2">
-                    {(testRun as any).ci_metadata.commitHref && (
+                    {testRun.ci_metadata.commitHref && (
                       <a
-                        href={(testRun as any).ci_metadata.commitHref}
+                        href={testRun.ci_metadata.commitHref}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
@@ -213,9 +287,9 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     )}
-                    {(testRun as any).ci_metadata.buildHref && (
+                    {testRun.ci_metadata.buildHref && (
                       <a
-                        href={(testRun as any).ci_metadata.buildHref}
+                        href={testRun.ci_metadata.buildHref}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600"
@@ -367,17 +441,29 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                           </div>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {testCase.retryResults &&
-                            testCase.retryResults.length > 1 && (
-                              <span className="flex items-center gap-1 text-yellow-500">
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs border-yellow-500/50 text-yellow-500"
-                                >
-                                  {testCase.retryResults.length} attempts
-                                </Badge>
-                              </span>
-                            )}
+                          {testCase.metadata?.epic && (
+                            <Badge
+                              variant="default"
+                              className={`text-xs ${getColorForEpic(testCase.metadata.epic)}`}
+                            >
+                              {testCase.metadata.epic}
+                            </Badge>
+                          )}
+                          {testCase.metadata?.browser && (
+                            <Badge variant="secondary" className="text-xs">
+                              {testCase.metadata.browser}
+                            </Badge>
+                          )}
+                          {testCase.attempts.length > 1 && (
+                            <span className="flex items-center gap-1 text-yellow-500">
+                              <Badge
+                                variant="outline"
+                                className="text-xs border-yellow-500/50 text-yellow-500"
+                              >
+                                {testCase.attempts.length} attempts
+                              </Badge>
+                            </span>
+                          )}
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             {testCase.duration}
@@ -387,10 +473,10 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                     </AccordionTrigger>
                     <AccordionContent>
                       <TestCaseDetails testCase={testCase} />
-                      <div className="pl-7 pt-2 space-y-3">
-                        <div className="space-y-2 flex justify-between">
-                          <div>
-                            <div className="flex items-start gap-2 text-sm">
+                      <div className="pl-7 pt-2 pb-4">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="space-y-1">
+                            <div className="flex items-start gap-2">
                               <span className="text-muted-foreground min-w-[80px]">
                                 File:
                               </span>
@@ -398,14 +484,14 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                                 {testCase.file}
                               </span>
                             </div>
-                            <div className="flex items-start gap-2 text-sm">
+                            <div className="flex items-start gap-2">
                               <span className="text-muted-foreground min-w-[80px]">
                                 Duration:
                               </span>
                               <span>{testCase.duration}</span>
                             </div>
                             {testCase.browser && (
-                              <div className="flex items-start gap-2 text-sm">
+                              <div className="flex items-start gap-2">
                                 <span className="text-muted-foreground min-w-[80px]">
                                   Browser:
                                 </span>
@@ -414,12 +500,12 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                             )}
                           </div>
                           <div>
-                            <a href={`/tests/${testCase.suite_test_id}`}>
+                            <Link href={`/tests/${testCase.suite_test_id}`}>
                               <Button size="sm">
                                 <ExternalLink className="h-4 w-4 mr-2" />
                                 View Test Health
                               </Button>
-                            </a>
+                            </Link>
                           </div>
                         </div>
                       </div>
@@ -433,38 +519,23 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
           <TabsContent value="timeline">
             <TimelineView
               tests={(() => {
-                // Flatten tests to include each retry as a separate entry
+                // Flatten tests to include each attempt as a separate entry
                 const flatTests: any[] = [];
                 allTestCases.forEach((test) => {
-                  if (test.retryResults && test.retryResults.length > 0) {
-                    // For each retry, create a timeline entry
-                    test.retryResults.forEach((retry, idx) => {
-                      if (retry.startTime && retry.duration) {
-                        flatTests.push({
-                          id: `${test.id}-retry-${idx}`,
-                          name: `${test.name} ${retry.retryIndex > 0 ? `(Retry ${retry.retryIndex})` : "(Attempt 1)"}`,
-                          file: test.file,
-                          status: retry.status,
-                          started_at: retry.startTime,
-                          durationMs: retry.duration,
-                          worker_index: test.worker_index,
-                          originalTestId: test.id,
-                        });
-                      }
-                    });
-                  } else if (test.started_at && test.durationMs) {
-                    // No retries, use the test's own timing
-                    flatTests.push({
-                      id: test.id,
-                      name: test.name,
-                      file: test.file,
-                      status: test.status,
-                      started_at: test.started_at,
-                      durationMs: test.durationMs,
-                      worker_index: test.worker_index,
-                      originalTestId: test.id,
-                    });
-                  }
+                  test.attempts.forEach((attempt, idx) => {
+                    if (attempt.startTime && attempt.duration) {
+                      flatTests.push({
+                        id: `${test.id}-attempt-${idx}`,
+                        name: `${test.name} ${attempt.attemptIndex > 0 ? `(Attempt ${attempt.attemptIndex + 1})` : ""}`,
+                        file: test.file,
+                        status: attempt.status,
+                        started_at: attempt.startTime,
+                        durationMs: attempt.duration,
+                        worker_index: test.worker_index,
+                        originalTestId: test.id,
+                      });
+                    }
+                  });
                 });
                 return flatTests;
               })()}

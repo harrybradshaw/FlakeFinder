@@ -1,9 +1,54 @@
-# Playwright Report Utils Tests
+# Library## Test Coverage Summary
 
-This directory contains unit tests for the Playwright report processing utilities.
+This directory contains comprehensive test coverage for the test viewer application's core functionality.
+
+## API Route Tests
+
+### app/api/test-runs/[id]/tests/[testId]/route.test.ts (4 tests)
+- ✅ **CRITICAL: `retry_index` → `attemptIndex` mapping** (prevents "Attempt NaN" bug)
+- ✅ Returns test details with all attempt fields properly mapped
+- ✅ Handles 404 when test is not found
+- ✅ Handles tests with no attempts
+- ✅ Returns 500 when database is not configured
+
+## Library Tests
+
+## Test Files
+
+- `playwright-report-utils.test.ts` - Playwright report processing
+- `zip-extraction-utils.test.ts` - ZIP extraction and test data parsing
+- `test-runs.test.ts` - Test run data fetching and transformation
 
 ## Test Coverage
 
+### test-runs.test.ts (NEW)
+- ✅ Fetching test runs from database
+- ✅ Transforming database fields to frontend format
+- ✅ **Critical: `retry_index` → `attemptIndex` mapping** (fixes "Attempt NaN" bug)
+- ✅ `error_stack` → `errorStack` mapping
+- ✅ `started_at` → `startTime` mapping
+- ✅ Handling tests with multiple attempts (flaky tests)
+- ✅ Handling tests with no attempts
+- ✅ Authorization checks for user access
+- ✅ Error handling for missing/invalid data
+- ✅ Null/undefined handling for optional fields
+- ✅ Environment variable validation
+
+### zip-extraction-utils.test.ts (51 tests)
+- ✅ Extracting tests from ZIP files
+- ✅ Parsing test metadata, CI data, execution time
+- ✅ Handling flaky tests with retry attempts
+- ✅ Screenshot extraction and path mapping
+- ✅ Error message extraction
+- ✅ **Allure metadata extraction** (epic, labels, parameters, descriptions from .dat files)
+  - ✅ Test with real Playwright report containing 25 tests with epics
+  - ✅ Validates 3 unique epics: "Season Tickets", "Standalone Reservations", "Ticket Purchase"
+  - ✅ Verifies label structure and epic extraction
+  - ✅ Validates parameter extraction and structure
+  - ✅ Confirms description/descriptionHtml extraction
+- ✅ **Robust assertions with specific expected values** (no conditional tests)
+
+### playwright-report-utils.test.ts
 The test suite covers:
 
 ### Core Functionality

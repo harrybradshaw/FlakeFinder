@@ -89,6 +89,23 @@ export function extractBranchFromCI(
   ciMetadata: CIMetadata,
   fallbackBranch: string = "unknown",
 ): string {
+  const MAX_BRANCH_LENGTH = 60;
+
+  // Helper to sanitize and truncate branch names
+  const sanitizeBranch = (branch: string): string => {
+    // Remove special characters that might cause issues
+    const sanitized = branch.replace(/[^a-zA-Z0-9-_/]/g, "-");
+    // Truncate if too long
+    return sanitized.length > MAX_BRANCH_LENGTH
+      ? sanitized.substring(0, MAX_BRANCH_LENGTH) + "..."
+      : sanitized;
+  };
+
+  // If user explicitly provided a branch (not "unknown"), respect it
+  if (fallbackBranch && fallbackBranch !== "unknown") {
+    return sanitizeBranch(fallbackBranch);
+  }
+
   // Try standard CI environment variables
   let detectedBranch =
     ciMetadata.GITHUB_HEAD_REF || // GitHub PR branch
@@ -105,15 +122,22 @@ export function extractBranchFromCI(
     if (ticketMatch) {
       detectedBranch = ticketMatch[1];
     } else {
-      // If no ticket pattern, use PR number from URL
-      const prMatch = ciMetadata.prHref?.match(/\/pull\/(\d+)$/);
-      if (prMatch) {
-        detectedBranch = `pr-${prMatch[1]}`;
+      // Use the PR title directly (sanitized)
+      // Remove the colon and everything after for cleaner names
+      const titlePart = ciMetadata.prTitle.split(":")[0].trim();
+      if (titlePart) {
+        detectedBranch = titlePart;
+      } else {
+        // Last resort: use PR number from URL
+        const prMatch = ciMetadata.prHref?.match(/\/pull\/(\d+)$/);
+        if (prMatch) {
+          detectedBranch = `pr-${prMatch[1]}`;
+        }
       }
     }
   }
 
-  return detectedBranch || fallbackBranch;
+  return detectedBranch ? sanitizeBranch(detectedBranch) : fallbackBranch;
 }
 
 /**

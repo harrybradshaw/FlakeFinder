@@ -36,7 +36,7 @@ describe('POST /api/check-duplicate', () => {
     process.env.SUPABASE_ANON_KEY = 'test-key';
   });
 
-  it('should return 400 when file is missing', async () => {
+  it('should return 400 when both file and contentHash are missing', async () => {
     const formData = new FormData();
     formData.append('environment', 'production');
     formData.append('trigger', 'manual');
@@ -52,7 +52,7 @@ describe('POST /api/check-duplicate', () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toBe('Missing required fields');
-    expect(data.details).toContain('file');
+    expect(data.details).toContain('contentHash or file');
   });
 
   it('should return 400 when environment is missing', async () => {
@@ -226,5 +226,32 @@ describe('POST /api/check-duplicate', () => {
     expect(response.status).toBe(500);
     expect(data.error).toBe('Internal server error');
     expect(data.details).toBeDefined();
+  });
+
+  it('should accept hash-only request without file (efficient mode)', async () => {
+    const formData = new FormData();
+    formData.append('contentHash', 'abc123hash456def');
+    formData.append('environment', 'production');
+    formData.append('trigger', 'manual');
+    formData.append('branch', 'main');
+    formData.append('commit', 'abc123');
+
+    const request = new NextRequest('http://localhost:3000/api/check-duplicate', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.hasDuplicates).toBeDefined();
+    expect(data.testCount).toBeUndefined(); // No test count in hash-only mode
+    expect(data.metadata).toBeDefined();
+    expect(data.metadata.environment).toBe('production');
+    expect(data.metadata.trigger).toBe('manual');
+    expect(data.metadata.branch).toBe('main');
+    expect(data.metadata.commit).toBe('abc123');
   });
 });

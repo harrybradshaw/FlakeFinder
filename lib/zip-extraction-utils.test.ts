@@ -58,18 +58,31 @@ describe("zip-extraction-utils", () => {
   });
 
   describe("extractBranchFromCI", () => {
-    it("should extract branch from GITHUB_HEAD_REF", () => {
+    it("should respect user-provided branch over CI metadata", () => {
+      const ciMetadata: CIMetadata = {
+        GITHUB_HEAD_REF: "feature/test-branch",
+        prTitle: "WS-2938: Fix something",
+      };
+      // When user provides explicit branch, it should be used
+      expect(extractBranchFromCI(ciMetadata, "my-custom-branch")).toBe(
+        "my-custom-branch",
+      );
+    });
+
+    it("should extract branch from GITHUB_HEAD_REF when fallback is unknown", () => {
       const ciMetadata: CIMetadata = {
         GITHUB_HEAD_REF: "feature/test-branch",
       };
-      expect(extractBranchFromCI(ciMetadata)).toBe("feature/test-branch");
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe(
+        "feature/test-branch",
+      );
     });
 
-    it("should extract branch from GITHUB_REF_NAME", () => {
+    it("should extract branch from GITHUB_REF_NAME when fallback is unknown", () => {
       const ciMetadata: CIMetadata = {
         GITHUB_REF_NAME: "main",
       };
-      expect(extractBranchFromCI(ciMetadata)).toBe("main");
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe("main");
     });
 
     it("should prioritize GITHUB_HEAD_REF over GITHUB_REF_NAME", () => {
@@ -77,22 +90,33 @@ describe("zip-extraction-utils", () => {
         GITHUB_HEAD_REF: "feature-branch",
         GITHUB_REF_NAME: "main",
       };
-      expect(extractBranchFromCI(ciMetadata)).toBe("feature-branch");
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe(
+        "feature-branch",
+      );
     });
 
-    it("should extract ticket from PR title", () => {
+    it("should extract ticket from PR title when no CI vars and fallback is unknown", () => {
       const ciMetadata: CIMetadata = {
         prTitle: "WS-2938: Fix something important",
       };
-      expect(extractBranchFromCI(ciMetadata)).toBe("WS-2938");
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe("WS-2938");
     });
 
-    it("should extract PR number from href when no ticket in title", () => {
+    it("should use PR title part before colon when no ticket pattern", () => {
       const ciMetadata: CIMetadata = {
-        prTitle: "Fix something",
+        prTitle: "WS-XX: Try add ingest into FlakeFinder.",
+        prHref: "https://github.com/org/repo/pull/2007",
+      };
+      // Should use "WS-XX" instead of falling back to "pr-2007"
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe("WS-XX");
+    });
+
+    it("should extract PR number from href when no ticket and no title part", () => {
+      const ciMetadata: CIMetadata = {
+        prTitle: ": Fix something", // Empty before colon
         prHref: "https://github.com/org/repo/pull/123",
       };
-      expect(extractBranchFromCI(ciMetadata)).toBe("pr-123");
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe("pr-123");
     });
 
     it("should return fallback when no branch found", () => {
@@ -105,7 +129,29 @@ describe("zip-extraction-utils", () => {
       const ciMetadata: CIMetadata = {
         BRANCH: "develop",
       };
-      expect(extractBranchFromCI(ciMetadata)).toBe("develop");
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe("develop");
+    });
+
+    it("should sanitize special characters in branch names", () => {
+      const ciMetadata: CIMetadata = {};
+      expect(extractBranchFromCI(ciMetadata, "feature@branch#test")).toBe(
+        "feature-branch-test",
+      );
+    });
+
+    it("should truncate long branch names to 60 characters", () => {
+      const ciMetadata: CIMetadata = {};
+      const longBranch = "a".repeat(70);
+      const result = extractBranchFromCI(ciMetadata, longBranch);
+      expect(result.length).toBe(63); // 60 chars + "..."
+      expect(result).toBe("a".repeat(60) + "...");
+    });
+
+    it("should preserve allowed characters in branch names", () => {
+      const ciMetadata: CIMetadata = {};
+      expect(extractBranchFromCI(ciMetadata, "feature-123_test/branch")).toBe(
+        "feature-123_test/branch",
+      );
     });
   });
 

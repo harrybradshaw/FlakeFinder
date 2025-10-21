@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 interface DuplicateCheckResult {
   success: boolean;
-  testCount: number;
+  testCount?: number; // Optional since we might not have the file
   hasDuplicates: boolean;
   duplicateCount: number;
   metadata: {
@@ -32,8 +32,12 @@ interface DuplicateCheckResult {
 /**
  * POST /api/check-duplicate
  *
- * Checks for duplicate test runs by processing the uploaded test report
- * and comparing it with existing runs in the database.
+ * Checks for duplicate test runs by comparing a content hash
+ * with existing runs in the database.
+ *
+ * Accepts either:
+ * 1. Hash-only mode (efficient): contentHash + metadata only
+ * 2. Legacy mode (wasteful): Full file upload
  */
 export async function POST(request: NextRequest) {
   try {
@@ -45,10 +49,9 @@ export async function POST(request: NextRequest) {
     const commit = formData.get("commit") as string | null;
     const preCalculatedHash = formData.get("contentHash") as string | null;
 
-    // Validate required fields
-    if (!file || !environment || !trigger || !branch) {
+    // Validate required fields - file is now optional if hash is provided
+    if (!environment || !trigger || !branch) {
       const missingFields = [
-        !file && "file",
         !environment && "environment",
         !trigger && "trigger",
         !branch && "branch",
@@ -63,26 +66,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Must have either a hash or a file
+    if (!preCalculatedHash && !file) {
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          details: "Must provide either contentHash or file",
+        },
+        { status: 400 },
+      );
+    }
+
     let contentHash: string;
-    let tests: TestResult[];
+    let tests: TestResult[] | undefined;
     let metadata: Record<string, any> | undefined;
 
-    // If hash was pre-calculated (from optimized upload), use it
-    // Otherwise calculate from the file
-    if (preCalculatedHash) {
+    // Efficient path: hash-only check (no file processing needed)
+    if (preCalculatedHash && !file) {
       console.log(
-        "[Duplicate Check] Using pre-calculated hash:",
+        "[Duplicate Check] Hash-only mode (efficient):",
         preCalculatedHash,
       );
       contentHash = preCalculatedHash;
-      // Still need to process file to get test count for response
+      // No test count available in hash-only mode
+    } else if (preCalculatedHash && file) {
+      // Hybrid mode: hash provided but also have file (legacy compatibility)
+      console.log(
+        "[Duplicate Check] Hybrid mode - using pre-calculated hash:",
+        preCalculatedHash,
+      );
+      contentHash = preCalculatedHash;
+      // Still process file to get test count for backwards compatibility
       const processed = await processPlaywrightReportFile(file);
       tests = processed.tests;
       metadata = processed.metadata;
     } else {
-      // Legacy path: calculate hash from file
-      console.log("[Duplicate Check] Calculating hash from file");
-      const processed = await processPlaywrightReportFile(file);
+      // Legacy path: calculate hash from file (wasteful)
+      console.log(
+        "[Duplicate Check] Legacy mode - calculating hash from file (wasteful)",
+      );
+      const processed = await processPlaywrightReportFile(file!);
       tests = processed.tests;
       metadata = processed.metadata;
 
@@ -101,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     const result: DuplicateCheckResult = {
       success: true,
-      testCount: tests.length,
+      testCount: tests?.length, // Optional in hash-only mode
       hasDuplicates: duplicateCheck.isDuplicate,
       duplicateCount: duplicateCheck.isDuplicate ? 1 : 0,
       metadata: {

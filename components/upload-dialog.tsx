@@ -329,8 +329,6 @@ export function UploadDialog() {
             if (detectedEnvironment) setEnvironment(detectedEnvironment);
             if (detectedTrigger) setTrigger(detectedTrigger);
 
-            // Calculate hash from original data BEFORE optimization
-            // Then optimize and send optimized file with pre-calculated hash
             setCheckingDuplicate(true);
             try {
               // Process the report data to extract tests in the same format as the backend
@@ -345,19 +343,8 @@ export function UploadDialog() {
               // Store hash for later use in upload
               setCalculatedHash(contentHash);
 
-              // Now optimize the ZIP
-              const optimizedBlob = await optimizeZip(zip);
-              console.log(
-                "[Duplicate Check] Optimized file:",
-                (optimizedBlob.size / 1024 / 1024).toFixed(2),
-                "MB (from",
-                (file.size / 1024 / 1024).toFixed(2),
-                "MB)",
-              );
-
               const formData = new FormData();
-              formData.append("file", optimizedBlob, file.name);
-              formData.append("contentHash", contentHash); // Send pre-calculated hash
+              formData.append("contentHash", contentHash);
               formData.append(
                 "environment",
                 detectedEnvironment || environment,
@@ -376,9 +363,6 @@ export function UploadDialog() {
 
               if (response.ok) {
                 const data = await response.json();
-                console.log("[Duplicate Check] Response:", data);
-
-                // API returns 'hasDuplicates' not 'isDuplicate'
                 if (data.hasDuplicates && data.existingRun) {
                   setIsDuplicate(true);
                   setDuplicateInfo({

@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
-    environment: 'happy-dom',
+    environment: 'node', // Changed from happy-dom to node for server-side tests
     setupFiles: ['./vitest.setup.ts'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
     coverage: {

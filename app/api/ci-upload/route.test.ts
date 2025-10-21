@@ -70,6 +70,8 @@ describe("POST /api/ci-upload", () => {
         compressionRatio: 50,
         filesRemoved: 10,
         bytesRemoved: mockZipBuffer.length * 0.5,
+        imagesCompressed: 5,
+        imageBytesSaved: 1000000,
       },
     });
   });

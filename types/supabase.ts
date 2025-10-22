@@ -234,10 +234,12 @@ export type Database = {
           error: string | null
           error_stack: string | null
           id: string
+          last_failed_step: Json | null
           retry_index: number
           screenshots: Json | null
           started_at: string | null
           status: string
+          steps_url: string | null
           test_id: string
         }
         Insert: {
@@ -247,10 +249,12 @@ export type Database = {
           error?: string | null
           error_stack?: string | null
           id?: string
+          last_failed_step?: Json | null
           retry_index?: number
           screenshots?: Json | null
           started_at?: string | null
           status: string
+          steps_url?: string | null
           test_id: string
         }
         Update: {
@@ -260,10 +264,12 @@ export type Database = {
           error?: string | null
           error_stack?: string | null
           id?: string
+          last_failed_step?: Json | null
           retry_index?: number
           screenshots?: Json | null
           started_at?: string | null
           status?: string
+          steps_url?: string | null
           test_id?: string
         }
         Relationships: [

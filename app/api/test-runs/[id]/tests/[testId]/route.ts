@@ -48,6 +48,13 @@ export async function GET(
     if (attemptsError) {
       console.error("[getTestDetails] Error fetching test attempts:", attemptsError);
     }
+    
+    // Debug logging
+    console.log('[API] Test attempts:', testAttempts?.map(a => ({ 
+      id: a.id, 
+      steps_url: a.steps_url,
+      hasSteps: !!a.steps_url 
+    })));
 
     const response: TestDetailsResponse = {
       test: {
@@ -64,15 +71,24 @@ export async function GET(
           attemptIndex: attempt.retry_index,
           retry_index: attempt.retry_index,
           retryIndex: attempt.retry_index,
+          id: attempt.id,
+          testResultId: attempt.id,
           status: attempt.status,
           duration: attempt.duration,
           error: attempt.error ?? undefined,
           error_stack: attempt.error_stack ?? undefined,
           errorStack: attempt.error_stack ?? undefined,
           screenshots: Array.isArray(attempt.screenshots) ? (attempt.screenshots as string[]) : [],
-          attachments: Array.isArray(attempt.attachments) ? (attempt.attachments as any[]) : [],
+          attachments: Array.isArray(attempt.attachments) ? (attempt.attachments as Array<{
+            name: string;
+            contentType: string;
+            content: string;
+          }>) : [],
           started_at: attempt.started_at ?? undefined,
           startTime: attempt.started_at ?? undefined,
+          stepsUrl: attempt.steps_url ?? undefined,
+          hasSteps: !!attempt.steps_url, // Hint: steps are available if stepsUrl exists
+          lastFailedStep: attempt.last_failed_step ? (attempt.last_failed_step as unknown as { title: string; duration: number; error: string }) : undefined,
         })),
       },
     };

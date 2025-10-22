@@ -117,6 +117,8 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
       attemptIndex: 0,
       retry_index: 0,
       retryIndex: 0,
+      id: expect.any(String),
+      testResultId: expect.any(String),
       status: "failed",
       duration: 2000,
       error: "First attempt failed",
@@ -126,6 +128,9 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
       attachments: [],
       started_at: "2025-01-20T10:00:00Z",
       startTime: "2025-01-20T10:00:00Z",
+      stepsUrl: undefined,
+      hasSteps: false,
+      lastFailedStep: undefined,
     });
   });
 

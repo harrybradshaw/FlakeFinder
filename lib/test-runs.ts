@@ -128,6 +128,7 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
       metadata: (typeof test.metadata === 'object' && test.metadata !== null && !Array.isArray(test.metadata)) ? test.metadata : undefined,
       attempts: (attemptsByTestId.get(test.id) || []).map((attempt: any) => ({
         attemptIndex: attempt.retry_index,
+        testResultId: attempt.id,  // For lazy loading steps
         status: attempt.status,
         duration: attempt.duration,
         error: attempt.error,
@@ -135,6 +136,8 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
         screenshots: Array.isArray(attempt.screenshots) ? attempt.screenshots : [],
         attachments: Array.isArray(attempt.attachments) ? attempt.attachments : [],
         startTime: attempt.started_at,
+        stepsUrl: attempt.steps_url ?? undefined,
+        lastFailedStep: attempt.last_failed_step ?? undefined,
       })),
     })),
   };
@@ -307,6 +310,7 @@ export async function getTestRun(
       metadata: (typeof test.metadata === 'object' && test.metadata !== null && !Array.isArray(test.metadata)) ? test.metadata : undefined,
       attempts: (attemptsByTestId.get(test.id) || []).map((attempt: any) => ({
         attemptIndex: attempt.retry_index,
+        testResultId: attempt.id,  // For lazy loading steps
         status: attempt.status,
         duration: attempt.duration,
         error: attempt.error,
@@ -314,6 +318,8 @@ export async function getTestRun(
         screenshots: Array.isArray(attempt.screenshots) ? attempt.screenshots : [],
         attachments: Array.isArray(attempt.attachments) ? attempt.attachments : [],
         startTime: attempt.started_at,
+        stepsUrl: attempt.steps_url ?? undefined,
+        lastFailedStep: attempt.last_failed_step ?? undefined,
       })),
     })),
   };

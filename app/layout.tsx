@@ -2,6 +2,7 @@ import React, { Suspense } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { AppHeader } from "@/components/app-header";
 import "./globals.css";
 
@@ -24,8 +25,10 @@ export default function RootLayout({
       <ClerkProvider>
         <html lang="en">
           <body className={`font-sans antialiased`}>
-            <AppHeader />
-            {children}
+            <NuqsAdapter>
+              <AppHeader />
+              {children}
+            </NuqsAdapter>
           </body>
         </html>
       </ClerkProvider>

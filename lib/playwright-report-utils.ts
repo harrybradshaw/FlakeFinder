@@ -15,6 +15,7 @@ export interface TestAttempt {
     content: string;
   }>;
   startTime?: string;
+  steps?: any[]; // Test execution steps (JSONB)
 }
 
 export interface TestResult {

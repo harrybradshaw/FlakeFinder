@@ -2,11 +2,31 @@
  * Shared API response types for type-safe communication between API routes and frontend
  */
 
+// Test step structure (hierarchical)
+export interface TestStep {
+  title: string;
+  category?: string; // e.g., "hook", "expect", "pw:api", "test.step"
+  startTime?: string;
+  duration: number;
+  error?: string | { // Can be string or object
+    message: string;
+    stack?: string;
+  };
+  location?: {
+    file: string;
+    line: number;
+    column: number;
+  };
+  steps?: TestStep[]; // Nested steps for hierarchy
+}
+
 // Test attempt/retry structure
 export interface TestAttempt {
   attemptIndex: number;
   retry_index?: number; // Legacy support
   retryIndex?: number; // Legacy support
+  id?: string; // Test result ID for lazy loading steps
+  testResultId?: string; // Alternative field name
   status: string;
   duration: number;
   error?: string;
@@ -20,6 +40,13 @@ export interface TestAttempt {
   }>;
   startTime?: string;
   started_at?: string; // Legacy support
+  steps?: TestStep[]; // Test execution steps (inline)
+  stepsUrl?: string; // URL to lazy load steps from storage
+  lastFailedStep?: {
+    title: string;
+    duration: number;
+    error: string;
+  };
 }
 
 // Test details response from /api/test-runs/[id]/tests/[testId]

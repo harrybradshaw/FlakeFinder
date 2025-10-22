@@ -59,6 +59,8 @@ const eslintConfig = [
       'build/**',
       '*.config.js',
       '*.config.mjs',
+      'next-env.d.ts',
+      'scripts/upload-playwright-report.js',
     ],
   },
 ];

@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { getOrganizationProjects } from "@/app/api/projects/route";
 import { type Database } from "@/types/supabase";
 
 export async function GET(request: NextRequest) {
@@ -12,6 +11,8 @@ export async function GET(request: NextRequest) {
     const suite = searchParams.get("suite");
     const timeRange = searchParams.get("timeRange") || "7d";
     const contentHash = searchParams.get("contentHash");
+    const limit = parseInt(searchParams.get("limit") || "20", 10);
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
 
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       console.log("[API] Supabase not configured, returning empty array");
@@ -189,6 +190,7 @@ export async function GET(request: NextRequest) {
 
     let data = null;
     let error = null;
+    let testRunIdsInSuite: string[] = [];
 
     // If suite filter is applied, we need to filter test runs that have tests in that suite
     if (suiteId) {
@@ -210,7 +212,7 @@ export async function GET(request: NextRequest) {
 
       if (suiteTestIdList.length === 0) {
         // No tests in this suite, return empty
-        return NextResponse.json({ runs: [] });
+        return NextResponse.json({ runs: [], total: 0 });
       }
 
       // Get test_run_ids that have tests with these suite_test_ids
@@ -227,21 +229,47 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const testRunIdsInSuite = [
+      testRunIdsInSuite = [
         ...new Set(testsInSuite?.map((t) => t.test_run_id) || []),
       ];
 
       if (testRunIdsInSuite.length === 0) {
         // No test runs with tests in this suite
-        return NextResponse.json({ runs: [] });
+        return NextResponse.json({ runs: [], total: 0 });
       }
 
       // Add suite filter to query
       query = query.in("id", testRunIdsInSuite);
     }
 
-    // Execute query
-    const queryResult = await query;
+    // Get count with a separate query (without joins, which don't work well with count)
+    let countQuery = supabase
+      .from("test_runs")
+      .select("*", { count: "exact", head: true })
+      .in("project_id", accessibleProjectIds);
+
+    // Apply same filters to count query
+    if (projectId) {
+      countQuery = countQuery.eq("project_id", projectId);
+    }
+    if (environmentId) {
+      countQuery = countQuery.eq("environment_id", environmentId);
+    }
+    if (triggerId) {
+      countQuery = countQuery.eq("trigger_id", triggerId);
+    }
+    if (!contentHash) {
+      countQuery = countQuery.gte("timestamp", startDate.toISOString());
+    }
+    if (suiteId && testRunIdsInSuite.length > 0) {
+      countQuery = countQuery.in("id", testRunIdsInSuite);
+    }
+
+    const { count: totalCount } = await countQuery;
+
+    // Apply pagination to main query
+    const queryResult = await query.range(offset, offset + limit - 1);
+
     data = queryResult.data;
     error = queryResult.error;
 
@@ -274,7 +302,7 @@ export async function GET(request: NextRequest) {
       uploaded_filename: run.uploaded_filename,
     }));
 
-    return NextResponse.json({ runs });
+    return NextResponse.json({ runs, total: totalCount || 0 });
   } catch (error) {
     console.error("[API] Error fetching test runs:", error);
     return NextResponse.json(

@@ -22,6 +22,15 @@ export interface ScreenshotUploadResult {
   screenshotCount: number;
 }
 
+export interface StepsUploadResult {
+  stepsUrl: string | null;
+  lastFailedStep: {
+    title: string;
+    duration: number;
+    error: string;
+  } | null;
+}
+
 export interface ProcessedUpload {
   tests: ExtractedTest[];
   stats: ReturnType<typeof calculateTestStats>;
@@ -140,6 +149,102 @@ export async function processScreenshots(
     screenshotUrls,
     screenshotCount: screenshotFiles.length,
   };
+}
+
+/**
+ * Upload test steps to Supabase Storage and extract last failed step
+ */
+export async function processTestSteps(
+  steps: unknown[] | undefined,
+  testRunId: string,
+  testId: string,
+  retryIndex: number,
+  logPrefix: string = "[Upload]",
+): Promise<StepsUploadResult> {
+  if (!steps || steps.length === 0) {
+    return { stepsUrl: null, lastFailedStep: null };
+  }
+
+  // Helper function to recursively find the last failed step
+  function findLastFailedStep(steps: unknown[]): StepsUploadResult["lastFailedStep"] {
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const step = steps[i] as Record<string, unknown>;
+      
+      // Check nested steps first (depth-first search from end)
+      if (step.steps && Array.isArray(step.steps)) {
+        const nestedFailed = findLastFailedStep(step.steps);
+        if (nestedFailed) return nestedFailed;
+      }
+      
+      // Check if this step has an error
+      if (step.error) {
+        return {
+          title: String(step.title || "Unknown step"),
+          duration: Number(step.duration || 0),
+          error: typeof step.error === 'string' 
+            ? step.error 
+            : String((step.error as Record<string, unknown>)?.message || step.error),
+        };
+      }
+    }
+    return null;
+  }
+
+  const lastFailedStep = findLastFailedStep(steps);
+
+  // Upload to Supabase Storage if configured
+  if (
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const supabaseAdmin = createClient<Database>(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        },
+      );
+
+      // Generate unique path
+      const stepsPath = `${testRunId}/${testId}-${retryIndex}.json`;
+      
+      // Convert steps to JSON buffer
+      const stepsJson = JSON.stringify(steps, null, 2);
+      const stepsBuffer = Buffer.from(stepsJson, 'utf-8');
+
+      // Upload to storage
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("test-steps")
+        .upload(stepsPath, stepsBuffer, {
+          contentType: "application/json",
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error(`${logPrefix} Failed to upload steps:`, uploadError);
+        return { stepsUrl: null, lastFailedStep };
+      }
+
+      console.log(`${logPrefix} Uploaded steps to storage:`, stepsPath);
+      
+      return {
+        stepsUrl: stepsPath,
+        lastFailedStep,
+      };
+    } catch (error) {
+      console.error(`${logPrefix} Error uploading steps:`, error);
+      return { stepsUrl: null, lastFailedStep };
+    }
+  }
+
+  console.log(`${logPrefix} Supabase Storage not configured, skipping steps upload`);
+  return { stepsUrl: null, lastFailedStep };
 }
 
 /**
@@ -623,6 +728,15 @@ export async function insertTestRun(params: {
 
       if (insertedTest && test.attempts && test.attempts.length > 0) {
         for (const attempt of test.attempts) {
+          // Process steps: upload to storage and extract last failed
+          const { stepsUrl, lastFailedStep } = await processTestSteps(
+            attempt.steps,
+            runData.id,
+            insertedTest.id,
+            attempt.retryIndex,
+            logPrefix,
+          );
+
           testResultsToInsert.push({
             test_id: insertedTest.id,
             retry_index: attempt.retryIndex,
@@ -633,6 +747,8 @@ export async function insertTestRun(params: {
             screenshots: attempt.screenshots,
             attachments: attempt.attachments || [],
             started_at: attempt.startTime,
+            steps_url: stepsUrl,  // Store URL instead of full steps
+            last_failed_step: lastFailedStep,  // Store summary
           });
         }
       }

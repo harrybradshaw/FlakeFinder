@@ -161,7 +161,7 @@ export async function extractMetadataFromDatFiles(
     if (fileName.startsWith("__MACOSX/")) {
       continue;
     }
-    
+
     if (fileName.endsWith(".dat")) {
       const datContent = await zip.file(fileName)?.async("string");
       if (datContent) {
@@ -238,7 +238,7 @@ export async function extractTestsFromHtmlReport(
   for (const fileName of Object.keys(embeddedZip.files)) {
     // Skip macOS metadata files
     if (fileName.startsWith("__MACOSX/")) continue;
-    
+
     if (!fileName.endsWith(".json")) continue;
 
     // Skip report.json - it's metadata, not a test file
@@ -248,8 +248,9 @@ export async function extractTestsFromHtmlReport(
     if (!fileContent) continue;
 
     let testFile;
+    let parsedFile;
     try {
-      const parsedFile = JSON.parse(fileContent);
+      parsedFile = JSON.parse(fileContent);
       testFile = HTMLReportTestFileSchema.parse(parsedFile);
     } catch (error) {
       if (error instanceof ZodError) {
@@ -257,10 +258,16 @@ export async function extractTestsFromHtmlReport(
           `Invalid test file structure in ${fileName}:`,
           JSON.stringify(error.errors, null, 2),
         );
+        // Try to continue with raw parsed file if it has basic structure
+        if (parsedFile && parsedFile.tests) {
+          testFile = parsedFile;
+        } else {
+          continue;
+        }
       } else {
         console.warn(`Error parsing file ${fileName}:`, error);
+        continue;
       }
-      continue;
     }
 
     // Process tests from this file
@@ -303,6 +310,13 @@ export async function extractTestsFromHtmlReport(
               errorStack = result.errors.join("\n\n");
             }
 
+            // Extract steps - handle both array format and string references
+            let steps: any[] = [];
+            if (result.steps && Array.isArray(result.steps)) {
+              // Steps are embedded directly
+              steps = result.steps;
+            }
+
             return {
               retryIndex: result.retry || index,
               status: result.status,
@@ -312,6 +326,7 @@ export async function extractTestsFromHtmlReport(
               screenshots,
               attachments,
               startTime: result.startTime,
+              steps: steps,
             };
           }) || [];
 

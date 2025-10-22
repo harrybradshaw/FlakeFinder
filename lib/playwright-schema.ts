@@ -27,17 +27,33 @@ const AttachmentSchema = z.object({
   body: z.string().optional(), // Inline attachment content
 });
 
-// Schema for test result
-const TestResultSchema = z.object({
-  workerIndex: z.number().optional(), // May be undefined in some reports
-  status: z.enum(["passed", "failed", "timedOut", "skipped"]),
-  duration: z.number(),
-  error: ErrorSchema.optional(),
-  errors: z.array(z.string()).optional(),
-  attachments: z.array(AttachmentSchema).optional(),
-  retry: z.number(),
-  startTime: z.string(),
-});
+// Schema for test step (recursive for nested steps)
+const TestStepSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    title: z.string(),
+    category: z.string().optional(),
+    startTime: z.string().optional(),
+    duration: z.number(),
+    error: z.union([ErrorSchema, z.string()]).optional(), // Can be object or string
+    location: LocationSchema.optional(),
+    steps: z.array(TestStepSchema).optional(), // Recursive for nested steps
+  })
+);
+
+// Schema for test result - be lenient with unknown fields
+const TestResultSchema = z
+  .object({
+    workerIndex: z.number().optional(), // May be undefined in some reports
+    status: z.enum(["passed", "failed", "timedOut", "skipped"]),
+    duration: z.number(),
+    error: ErrorSchema.optional(),
+    errors: z.array(z.string()).optional(),
+    attachments: z.array(AttachmentSchema).optional(),
+    retry: z.number(),
+    startTime: z.string(),
+    steps: z.array(TestStepSchema).optional(), // Test execution steps
+  })
+  .passthrough(); // Allow additional fields and ignore invalid step formats
 
 // Schema for individual test
 const PlaywrightTestSchema = z.object({

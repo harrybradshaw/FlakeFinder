@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import useSWR from "swr";
+import useSWRImmutable from "swr/immutable";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -60,17 +61,12 @@ export default function TestsPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("health");
 
-  // Fetch environments and triggers dynamically
-  const { data: environmentsData } = useSWR(
+  // Fetch environments and triggers dynamically (immutable - these rarely change)
+  const { data: environmentsData } = useSWRImmutable(
     "/api/environments",
     configFetcher,
-    {
-      revalidateOnFocus: false,
-    },
   );
-  const { data: triggersData } = useSWR("/api/triggers", configFetcher, {
-    revalidateOnFocus: false,
-  });
+  const { data: triggersData } = useSWRImmutable("/api/triggers", configFetcher);
 
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];

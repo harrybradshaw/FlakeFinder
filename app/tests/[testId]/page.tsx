@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { use } from "react";
 import useSWR from "swr";
+import useSWRImmutable from "swr/immutable";
 import { Card } from "@/components/ui/card";
 import {
   Select,
@@ -94,7 +95,7 @@ function TestRunDetails({
   const testCase = data.test;
 
   // Transform to match TestCaseDetails interface with unified attempts structure
-  let attempts = [];
+  let attempts: any[];
 
   if (testCase.attempts) {
     // New format: already has attempts
@@ -234,9 +235,15 @@ export default function TestDetailPage({
   const [selectedTrigger, setSelectedTrigger] = useState<string>("all");
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("30d");
 
-  // Fetch environments and triggers dynamically
-  const { data: environmentsData } = useSWR<{ environments: any[] }>("/api/environments", fetcher);
-  const { data: triggersData } = useSWR<{ triggers: any[] }>("/api/triggers", fetcher);
+  // Fetch environments and triggers dynamically (immutable - these rarely change)
+  const { data: environmentsData } = useSWRImmutable<{ environments: any[] }>(
+    "/api/environments",
+    fetcher,
+  );
+  const { data: triggersData } = useSWRImmutable<{ triggers: any[] }>(
+    "/api/triggers",
+    fetcher,
+  );
 
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
@@ -262,10 +269,14 @@ export default function TestDetailPage({
     selectedTimeRange,
   ]);
 
-  const { data, error, isLoading } = useSWR<TestDetailResponse>(apiUrl, fetcher, {
-    refreshInterval: 60000,
-    revalidateOnFocus: true,
-  });
+  const { data, error, isLoading } = useSWR<TestDetailResponse>(
+    apiUrl,
+    fetcher,
+    {
+      refreshInterval: 60000,
+      revalidateOnFocus: true,
+    },
+  );
 
   // Prepare chart data
   const chartData = useMemo(() => {

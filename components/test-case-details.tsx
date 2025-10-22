@@ -1,3 +1,5 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
@@ -7,9 +9,13 @@ import {
 } from "@/components/ui/accordion";
 import stripAnsi from "strip-ansi";
 import Image from "next/image";
+import { TestStepsViewer } from "@/components/test-steps-viewer";
+import type { TestStep } from "@/types/api";
 
 interface TestAttempt {
   attemptIndex: number;
+  testResultId?: string;
+  id?: string;
   status: string;
   duration: number;
   error?: string;
@@ -17,6 +23,13 @@ interface TestAttempt {
   screenshots?: string[];
   attachments?: Array<{ name: string; contentType: string; content: string }>;
   startTime?: string;
+  steps?: TestStep[];
+  stepsUrl?: string;
+  lastFailedStep?: {
+    title: string;
+    duration: number;
+    error: string;
+  };
 }
 
 interface TestCaseDetailsProps {
@@ -42,7 +55,10 @@ export function TestCaseDetails({ testCase }: TestCaseDetailsProps) {
       (attempt.attachments && attempt.attachments.length > 0) ||
       attempt.error ||
       attempt.errorStack ||
-      (attempt.screenshots && attempt.screenshots.length > 0),
+      (attempt.screenshots && attempt.screenshots.length > 0) ||
+      (attempt.steps && attempt.steps.length > 0) ||
+      attempt.stepsUrl ||
+      attempt.testResultId,
   );
 
   // Don't render anything if there's no content to show
@@ -59,9 +75,11 @@ export function TestCaseDetails({ testCase }: TestCaseDetailsProps) {
           (attempt.error || attempt.errorStack) && attempt.status !== "passed";
         const hasScreenshots =
           attempt.screenshots && attempt.screenshots.length > 0;
+        const hasSteps = attempt.steps && attempt.steps.length > 0;
+        const hasStepsToLoad = attempt.stepsUrl || attempt.testResultId;
 
         // Skip attempts with no content
-        if (!hasAttachments && !hasError && !hasScreenshots) {
+        if (!hasAttachments && !hasError && !hasScreenshots && !hasSteps && !hasStepsToLoad) {
           return null;
         }
 
@@ -95,9 +113,9 @@ export function TestCaseDetails({ testCase }: TestCaseDetailsProps) {
               </div>
             )}
 
-            {/* Attachments Section */}
+            {/* Test Context - Inline Accordion */}
             {hasAttachments && (
-              <div>
+              <div className={hasMultipleAttempts ? "" : ""}>
                 <p className="text-sm font-semibold text-foreground mb-2">
                   Test Context
                 </p>
@@ -124,11 +142,20 @@ export function TestCaseDetails({ testCase }: TestCaseDetailsProps) {
               </div>
             )}
 
+            {/* Execution Steps - Modal Card */}
+            {(hasSteps || hasStepsToLoad) && (
+              <div className={hasAttachments ? "mt-4" : ""}>
+                <TestStepsViewer
+                  steps={attempt.steps}
+                  stepsUrl={attempt.stepsUrl}
+                  testResultId={attempt.testResultId || attempt.id}
+                />
+              </div>
+            )}
+
             {/* Error and Screenshots Section */}
             {(hasError || hasScreenshots) && (
-              <div
-                className={`${hasAttachments ? "mt-4" : ""} grid grid-cols-1 lg:grid-cols-2 gap-4`}
-              >
+              <div className={`${hasAttachments || hasSteps || hasStepsToLoad ? "mt-4" : ""} grid grid-cols-1 lg:grid-cols-2 gap-4`}>
                 {/* Error Details */}
                 {hasError && (
                   <div>

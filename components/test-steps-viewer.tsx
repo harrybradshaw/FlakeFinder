@@ -1,10 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, XCircle, CheckCircle, PlayCircle, Loader2, AlertCircle, X, Maximize2 } from "lucide-react";
+import {
+  ChevronRight,
+  XCircle,
+  CheckCircle,
+  PlayCircle,
+  Loader2,
+  AlertCircle,
+  X,
+  Maximize2,
+} from "lucide-react";
 import type { TestStep } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import stripAnsi from "strip-ansi";
 
 interface TestStepsViewerProps {
   steps?: TestStep[]; // Inline steps (already loaded)
@@ -12,7 +22,11 @@ interface TestStepsViewerProps {
   testResultId?: string;
 }
 
-export function TestStepsViewer({ steps: initialSteps, stepsUrl, testResultId }: TestStepsViewerProps) {
+export function TestStepsViewer({
+  steps: initialSteps,
+  stepsUrl,
+  testResultId,
+}: TestStepsViewerProps) {
   const [steps, setSteps] = useState<TestStep[] | undefined>(initialSteps);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,32 +36,32 @@ export function TestStepsViewer({ steps: initialSteps, stepsUrl, testResultId }:
   // Lazy load steps when modal opens
   const loadSteps = async () => {
     if (steps || isLoading) return; // Already loaded or loading
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const url = testResultId 
+      const url = testResultId
         ? `/api/test-results/${testResultId}/steps`
         : stepsUrl;
-      
+
       if (!url) {
         throw new Error("No steps URL or test result ID provided");
       }
 
       const response = await fetch(url);
-      
+
       // If 404, treat as no steps available
       if (response.status === 404) {
         setSteps([]);
         setStepsNotFound(true);
         return;
       }
-      
+
       if (!response.ok) {
         throw new Error(`Failed to load steps: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       const loadedSteps = data.steps || [];
       setSteps(loadedSteps);
@@ -79,14 +93,14 @@ export function TestStepsViewer({ steps: initialSteps, stepsUrl, testResultId }:
   };
 
   const summary = getStepsSummary();
-  
+
   // Disable the card if:
   // 1. Inline steps provided but empty
-  // 2. We've tried loading and confirmed steps don't exist  
+  // 2. We've tried loading and confirmed steps don't exist
   // 3. testResultId exists but no stepsUrl (means steps don't exist in storage)
   // 4. No way to load steps at all
-  const isDisabled = 
-    (initialSteps !== undefined && initialSteps.length === 0) || 
+  const isDisabled =
+    (initialSteps !== undefined && initialSteps.length === 0) ||
     stepsNotFound ||
     (testResultId && !stepsUrl && !initialSteps) ||
     (!initialSteps && !stepsUrl && !testResultId);
@@ -99,23 +113,31 @@ export function TestStepsViewer({ steps: initialSteps, stepsUrl, testResultId }:
         onClick={isDisabled ? undefined : handleCardClick}
         disabled={isDisabled}
         className={`w-full p-4 rounded-lg border border-border text-left group transition-colors ${
-          !isDisabled 
-            ? "bg-card hover:bg-accent/50 cursor-pointer" 
+          !isDisabled
+            ? "bg-card hover:bg-accent/50 cursor-pointer"
             : "bg-muted/30 cursor-not-allowed opacity-60"
         }`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <PlayCircle className={`h-5 w-5 ${
-              !isDisabled ? "text-muted-foreground" : "text-muted-foreground/50"
-            }`} />
+            <PlayCircle
+              className={`h-5 w-5 ${
+                !isDisabled
+                  ? "text-muted-foreground"
+                  : "text-muted-foreground/50"
+              }`}
+            />
             <div>
-              <p className={`text-sm font-medium ${
-                !isDisabled ? "text-foreground" : "text-muted-foreground"
-              }`}>Execution Steps</p>
+              <p
+                className={`text-sm font-medium ${
+                  !isDisabled ? "text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                Execution Steps
+              </p>
               {summary && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {summary.totalSteps} step{summary.totalSteps !== 1 ? 's' : ''}
+                  {summary.totalSteps} step{summary.totalSteps !== 1 ? "s" : ""}
                   {summary.failedSteps > 0 && (
                     <span className="text-destructive ml-1">
                       · {summary.failedSteps} failed
@@ -143,17 +165,19 @@ export function TestStepsViewer({ steps: initialSteps, stepsUrl, testResultId }:
 
       {/* Modal */}
       {isModalOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setIsModalOpen(false)}
         >
-          <div 
+          <div
             className="bg-card border border-border rounded-lg shadow-lg w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground">Execution Steps</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                Execution Steps
+              </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="p-1 rounded hover:bg-accent transition-colors"
@@ -177,11 +201,13 @@ export function TestStepsViewer({ steps: initialSteps, stepsUrl, testResultId }:
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <div className="flex items-center gap-2 text-destructive">
                     <AlertCircle className="h-5 w-5" />
-                    <span className="text-sm font-medium">Failed to load execution steps</span>
+                    <span className="text-sm font-medium">
+                      Failed to load execution steps
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground">{error}</p>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     onClick={() => {
                       setError(null);
@@ -273,14 +299,17 @@ function TestStepItem({ step, depth }: TestStepItemProps) {
 
     const colorMap: Record<string, string> = {
       hook: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-      expect: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-      "pw:api": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-      "test.step": "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+      expect:
+        "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      "pw:api":
+        "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+      "test.step":
+        "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
     };
 
     return (
-      <Badge 
-        variant="secondary" 
+      <Badge
+        variant="secondary"
         className={`text-xs px-1.5 py-0 ${colorMap[step.category] || ""}`}
       >
         {step.category}
@@ -312,14 +341,16 @@ function TestStepItem({ step, depth }: TestStepItemProps) {
             }`}
           />
         ) : (
-          <div className="w-4" /> 
+          <div className="w-4" />
         )}
 
         {/* Step icon */}
         {getStepIcon()}
 
         {/* Step title */}
-        <span className={`font-mono text-sm flex-1 ${step.error ? "text-red-700 dark:text-red-300" : ""}`}>
+        <span
+          className={`font-mono text-sm flex-1 ${step.error ? "text-red-700 dark:text-red-300" : ""}`}
+        >
           {step.title}
         </span>
 
@@ -339,9 +370,11 @@ function TestStepItem({ step, depth }: TestStepItemProps) {
           style={{ marginLeft: `${depth * 1.5 + 2.5}rem` }}
         >
           <p className="text-sm text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-wrap break-words">
-            {stripAnsi(typeof step.error === 'string' ? step.error : step.error.message)}
+            {stripAnsi(
+              typeof step.error === "string" ? step.error : step.error.message,
+            )}
           </p>
-          {typeof step.error === 'object' && step.error.stack && (
+          {typeof step.error === "object" && step.error.stack && (
             <pre className="mt-2 text-xs overflow-x-auto text-red-600 dark:text-red-400 whitespace-pre-wrap font-mono bg-red-100/50 dark:bg-red-950/30 p-2 rounded">
               {stripAnsi(step.error.stack)}
             </pre>

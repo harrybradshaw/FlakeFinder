@@ -290,6 +290,7 @@ export type Database = {
           content_hash: string | null
           created_at: string
           duration: number
+          environment_data: Json | null
           environment_id: string
           failed: number
           flaky: number
@@ -309,6 +310,7 @@ export type Database = {
           content_hash?: string | null
           created_at?: string
           duration?: number
+          environment_data?: Json | null
           environment_id: string
           failed?: number
           flaky?: number
@@ -328,6 +330,7 @@ export type Database = {
           content_hash?: string | null
           created_at?: string
           duration?: number
+          environment_data?: Json | null
           environment_id?: string
           failed?: number
           flaky?: number

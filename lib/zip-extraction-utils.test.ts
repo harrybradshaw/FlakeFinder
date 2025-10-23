@@ -11,6 +11,7 @@ import {
   mapScreenshotPaths,
   calculateTestStats,
   formatDuration,
+  extractEnvironmentData,
   ENVIRONMENT_MAPPING,
   type CIMetadata,
   type ExtractedTest,
@@ -841,6 +842,98 @@ describe("zip-extraction-utils", () => {
       expect(ENVIRONMENT_MAPPING.prod).toBe("production");
       expect(ENVIRONMENT_MAPPING.stage).toBe("staging");
       expect(ENVIRONMENT_MAPPING.test).toBe("testing");
+    });
+  });
+
+  describe("extractEnvironmentData", () => {
+    it("should extract valid environment.json from zip", async () => {
+      const zip = new JSZip();
+      const environmentData = {
+        tramVersion: "ef3f368c",
+        tramInfraVersion: "ad43c4e5",
+        paymentsVersion: "90670f95",
+        authVersion: "7bf9957e",
+        nodeVersion: "v20.19.5",
+        playwrightVersion: "1.52.0",
+        environment: "preview",
+        branch: "WS-3059",
+        commit: "d37003c978dc641ef19d961b255f4a42d74702fc",
+      };
+      zip.file("environment.json", JSON.stringify(environmentData));
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(result?.tramVersion).toBe("ef3f368c");
+      expect(result?.tramInfraVersion).toBe("ad43c4e5");
+      expect(result?.paymentsVersion).toBe("90670f95");
+      expect(result?.authVersion).toBe("7bf9957e");
+      expect(result?.nodeVersion).toBe("v20.19.5");
+      expect(result?.playwrightVersion).toBe("1.52.0");
+      expect(result?.environment).toBe("preview");
+      expect(result?.branch).toBe("WS-3059");
+      expect(result?.commit).toBe("d37003c978dc641ef19d961b255f4a42d74702fc");
+    });
+
+    it("should return undefined when environment.json is missing", async () => {
+      const zip = new JSZip();
+      zip.file("some-other-file.txt", "content");
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("should handle invalid JSON gracefully", async () => {
+      const zip = new JSZip();
+      zip.file("environment.json", "{ invalid json }");
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("should handle empty environment.json", async () => {
+      const zip = new JSZip();
+      zip.file("environment.json", "{}");
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(Object.keys(result!).length).toBe(0);
+    });
+
+    it("should handle partial environment data", async () => {
+      const zip = new JSZip();
+      const partialData = {
+        tramVersion: "abc123",
+        nodeVersion: "v18.0.0",
+      };
+      zip.file("environment.json", JSON.stringify(partialData));
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(result?.tramVersion).toBe("abc123");
+      expect(result?.nodeVersion).toBe("v18.0.0");
+      expect(result?.paymentsVersion).toBeUndefined();
+    });
+
+    it("should handle custom fields in environment data", async () => {
+      const zip = new JSZip();
+      const customData = {
+        tramVersion: "abc123",
+        customField: "customValue",
+        anotherField: 12345,
+      };
+      zip.file("environment.json", JSON.stringify(customData));
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(result?.tramVersion).toBe("abc123");
+      expect(result?.customField).toBe("customValue");
+      expect(result?.anotherField).toBe(12345);
     });
   });
 });

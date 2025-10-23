@@ -14,6 +14,7 @@ import {
   calculateTestStats,
   formatDuration,
   type ExtractedTest,
+  type EnvironmentData,
 } from "@/lib/zip-extraction-utils";
 import { calculateContentHash } from "@/lib/playwright-report-utils";
 
@@ -39,6 +40,7 @@ export interface ProcessedUpload {
   environment: string;
   timestamp: string;
   ciMetadata: Record<string, unknown> | null;
+  environmentData: EnvironmentData | null;
   totalDuration: number;
   durationFormatted: string;
 }
@@ -258,10 +260,14 @@ export async function processTestsFromZip(
   logPrefix: string = "[Upload]",
 ): Promise<ProcessedUpload> {
   // Extract tests using utility function
-  const { tests, ciMetadata, testExecutionTime } =
+  const { tests, ciMetadata, testExecutionTime, environmentData } =
     await extractTestsFromZip(zip);
 
   console.log(`${logPrefix} Extracted tests:`, tests.length);
+  
+  if (environmentData) {
+    console.log(`${logPrefix} Found environment data:`, environmentData);
+  }
 
   let branch = initialBranch;
   let environment = initialEnvironment;
@@ -316,6 +322,7 @@ export async function processTestsFromZip(
     environment,
     timestamp: testExecutionTime || new Date().toISOString(),
     ciMetadata: (ciMetadata as Record<string, unknown>) || null,
+    environmentData: environmentData || null,
     totalDuration,
     durationFormatted,
   };
@@ -635,6 +642,7 @@ export async function insertTestRun(params: {
         duration: processedData.totalDuration,
         timestamp: processedData.timestamp,
         ci_metadata: processedData.ciMetadata as any, // Type cast for JSON field
+        environment_data: processedData.environmentData as any, // Type cast for JSON field
         content_hash: processedData.contentHash,
         uploaded_filename: filename,
       })

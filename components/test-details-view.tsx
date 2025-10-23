@@ -221,7 +221,7 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-start gap-4">
             <Link href="/" prefetch={false}>
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="h-4 w-4" />
@@ -301,6 +301,69 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                   </div>
                 )}
             </div>
+
+            {/* Environment Data - Right Side */}
+            {testRun.environment_data && (
+              <div className="p-3 bg-muted/50 rounded-md border border-border min-w-[500px]">
+                <h3 className="text-xs font-semibold text-muted-foreground mb-2">
+                  Environment Information
+                </h3>
+                <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-xs">
+                  {testRun.environment_data.tramVersion && (
+                    <div>
+                      <span className="text-muted-foreground">Tram:</span>{" "}
+                      <span className="font-mono text-foreground">
+                        {testRun.environment_data.tramVersion}
+                      </span>
+                    </div>
+                  )}
+                  {testRun.environment_data.tramInfraVersion && (
+                    <div>
+                      <span className="text-muted-foreground">
+                        Tram Infra:
+                      </span>{" "}
+                      <span className="font-mono text-foreground">
+                        {testRun.environment_data.tramInfraVersion}
+                      </span>
+                    </div>
+                  )}
+                  {testRun.environment_data.paymentsVersion && (
+                    <div>
+                      <span className="text-muted-foreground">Payments:</span>{" "}
+                      <span className="font-mono text-foreground">
+                        {testRun.environment_data.paymentsVersion}
+                      </span>
+                    </div>
+                  )}
+                  {testRun.environment_data.authVersion && (
+                    <div>
+                      <span className="text-muted-foreground">Auth:</span>{" "}
+                      <span className="font-mono text-foreground">
+                        {testRun.environment_data.authVersion}
+                      </span>
+                    </div>
+                  )}
+                  {testRun.environment_data.nodeVersion && (
+                    <div>
+                      <span className="text-muted-foreground">Node:</span>{" "}
+                      <span className="font-mono text-foreground">
+                        {testRun.environment_data.nodeVersion}
+                      </span>
+                    </div>
+                  )}
+                  {testRun.environment_data.playwrightVersion && (
+                    <div>
+                      <span className="text-muted-foreground">
+                        Playwright:
+                      </span>{" "}
+                      <span className="font-mono text-foreground">
+                        {testRun.environment_data.playwrightVersion}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>

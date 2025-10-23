@@ -45,12 +45,29 @@ export interface CIMetadata {
 }
 
 /**
+ * Environment data extracted from environment.json
+ */
+export interface EnvironmentData {
+  tramVersion?: string;
+  tramInfraVersion?: string;
+  paymentsVersion?: string;
+  authVersion?: string;
+  nodeVersion?: string;
+  playwrightVersion?: string;
+  environment?: string;
+  branch?: string;
+  commit?: string;
+  [key: string]: any;
+}
+
+/**
  * Report extraction result
  */
 export interface ExtractionResult {
   tests: ExtractedTest[];
   ciMetadata?: CIMetadata;
   testExecutionTime?: string;
+  environmentData?: EnvironmentData;
 }
 
 /**
@@ -149,6 +166,27 @@ export function normalizeEnvironment(environment: string): string {
 }
 
 /**
+ * Extracts environment data from environment.json in a ZIP
+ */
+export async function extractEnvironmentData(
+  zip: JSZip,
+): Promise<EnvironmentData | undefined> {
+  const environmentFile = zip.file("environment.json");
+  if (!environmentFile) {
+    return undefined;
+  }
+
+  try {
+    const content = await environmentFile.async("string");
+    const data = JSON.parse(content);
+    return data as EnvironmentData;
+  } catch (e) {
+    console.warn("Failed to parse environment.json:", e);
+    return undefined;
+  }
+}
+
+/**
  * Extracts metadata from .dat files in a ZIP
  */
 export async function extractMetadataFromDatFiles(
@@ -210,6 +248,9 @@ export async function extractTestsFromHtmlReport(
   const tests: ExtractedTest[] = [];
   let ciMetadata: CIMetadata | undefined;
   let testExecutionTime: string | undefined;
+  
+  // Extract environment data from outer ZIP
+  const environmentData = await extractEnvironmentData(zip);
 
   // Extract CI metadata and test execution time from report.json
   const reportFile = embeddedZip.file("report.json");
@@ -456,7 +497,7 @@ export async function extractTestsFromHtmlReport(
     }
   }
 
-  return { tests, ciMetadata, testExecutionTime };
+  return { tests, ciMetadata, testExecutionTime, environmentData };
 }
 
 /**
@@ -466,6 +507,9 @@ export async function extractTestsFromJsonReport(
   zip: JSZip,
 ): Promise<ExtractionResult> {
   const tests: ExtractedTest[] = [];
+  
+  // Extract environment data
+  const environmentData = await extractEnvironmentData(zip);
 
   const reportFile =
     zip.file(/data\/.*\.json$/)?.[0] || zip.file("report.json");
@@ -546,7 +590,7 @@ export async function extractTestsFromJsonReport(
     extractTests(reportData.suites);
   }
 
-  return { tests };
+  return { tests, environmentData };
 }
 
 /**

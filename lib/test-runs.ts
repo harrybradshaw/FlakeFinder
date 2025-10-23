@@ -109,6 +109,7 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
     skipped: testRun.skipped,
     duration: formatDuration(testRun.duration),
     ci_metadata: (typeof testRun.ci_metadata === 'object' && testRun.ci_metadata !== null && !Array.isArray(testRun.ci_metadata)) ? (testRun.ci_metadata as Record<string, any>) : {},
+    environment_data: (typeof testRun.environment_data === 'object' && testRun.environment_data !== null && !Array.isArray(testRun.environment_data)) ? (testRun.environment_data as Record<string, any>) : undefined,
     tests: tests.map((test) => ({
       id: test.id,
       suite_test_id: test.suite_test_id ?? undefined,
@@ -291,6 +292,7 @@ export async function getTestRun(
     skipped: testRun.skipped,
     duration: formatDuration(testRun.duration),
     ci_metadata: (typeof testRun.ci_metadata === 'object' && testRun.ci_metadata !== null && !Array.isArray(testRun.ci_metadata)) ? (testRun.ci_metadata as Record<string, any>) : {},
+    environment_data: (typeof testRun.environment_data === 'object' && testRun.environment_data !== null && !Array.isArray(testRun.environment_data)) ? (testRun.environment_data as Record<string, any>) : undefined,
     tests: tests.map((test) => ({
       id: test.id,
       suite_test_id: test.suite_test_id ?? undefined,

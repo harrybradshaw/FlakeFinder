@@ -319,9 +319,7 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                   )}
                   {testRun.environment_data.tramInfraVersion && (
                     <div>
-                      <span className="text-muted-foreground">
-                        Tram Infra:
-                      </span>{" "}
+                      <span className="text-muted-foreground">Tram Infra:</span>{" "}
                       <span className="font-mono text-foreground">
                         {testRun.environment_data.tramInfraVersion}
                       </span>
@@ -353,9 +351,7 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                   )}
                   {testRun.environment_data.playwrightVersion && (
                     <div>
-                      <span className="text-muted-foreground">
-                        Playwright:
-                      </span>{" "}
+                      <span className="text-muted-foreground">Playwright:</span>{" "}
                       <span className="font-mono text-foreground">
                         {testRun.environment_data.playwrightVersion}
                       </span>

@@ -17,7 +17,9 @@ describe("Test Steps Feature", () => {
     const testsWithSteps = result.tests.filter(
       (test) =>
         test.attempts &&
-        test.attempts.some((attempt) => attempt.steps && attempt.steps.length > 0),
+        test.attempts.some(
+          (attempt) => attempt.steps && attempt.steps.length > 0,
+        ),
     );
 
     expect(testsWithSteps.length).toBeGreaterThan(0);
@@ -69,8 +71,7 @@ describe("Test Steps Feature", () => {
     if (testsWithNestedSteps.length > 0) {
       const test = testsWithNestedSteps[0];
       const attempt = test.attempts!.find(
-        (a) =>
-          a.steps && a.steps.some((s) => s.steps && s.steps.length > 0),
+        (a) => a.steps && a.steps.some((s) => s.steps && s.steps.length > 0),
       );
 
       const stepWithNesting = attempt!.steps!.find(
@@ -151,7 +152,7 @@ describe("Test Steps Feature", () => {
     // If there are steps, check for categories
     if (allSteps.length > 0) {
       const stepsWithCategories = allSteps.filter((s) => s.category);
-      
+
       // Categories are optional in Playwright, but if present, should be valid
       if (stepsWithCategories.length > 0) {
         const categories = new Set(stepsWithCategories.map((s) => s.category));

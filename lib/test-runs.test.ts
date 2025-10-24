@@ -45,8 +45,16 @@ describe("test-runs", () => {
         skipped: 0,
         duration: 120000,
         ci_metadata: { buildHref: "https://github.com/test/actions/123" },
-        project: { name: "test-project", display_name: "Test Project", color: "#ff0000" },
-        environment: { name: "production", display_name: "Production", color: "#00ff00" },
+        project: {
+          name: "test-project",
+          display_name: "Test Project",
+          color: "#ff0000",
+        },
+        environment: {
+          name: "production",
+          display_name: "Production",
+          color: "#00ff00",
+        },
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
@@ -60,7 +68,11 @@ describe("test-runs", () => {
           started_at: "2025-01-20T10:00:05Z",
           error: null,
           screenshots: ["screenshot1.png"],
-          suite_test: { id: "suite-test-1", name: "Test 1", file: "test1.spec.ts" },
+          suite_test: {
+            id: "suite-test-1",
+            name: "Test 1",
+            file: "test1.spec.ts",
+          },
         },
         {
           id: "test-2",
@@ -71,7 +83,11 @@ describe("test-runs", () => {
           started_at: "2025-01-20T10:00:10Z",
           error: null,
           screenshots: [],
-          suite_test: { id: "suite-test-2", name: "Test 2", file: "test2.spec.ts" },
+          suite_test: {
+            id: "suite-test-2",
+            name: "Test 2",
+            file: "test2.spec.ts",
+          },
         },
       ];
 
@@ -86,7 +102,9 @@ describe("test-runs", () => {
           error: "Test failed on first attempt",
           error_stack: "Error stack trace",
           screenshots: ["screenshot1-attempt1.png"],
-          attachments: [{ name: "log.txt", contentType: "text/plain", content: "logs" }],
+          attachments: [
+            { name: "log.txt", contentType: "text/plain", content: "logs" },
+          ],
           started_at: "2025-01-20T10:00:05Z",
         },
         {
@@ -164,7 +182,9 @@ describe("test-runs", () => {
       expect(result?.branch).toBe("main");
       expect(result?.commit).toBe("abc123");
       expect(result?.duration).toBe("2m 0s");
-      expect(result?.ci_metadata).toEqual({ buildHref: "https://github.com/test/actions/123" });
+      expect(result?.ci_metadata).toEqual({
+        buildHref: "https://github.com/test/actions/123",
+      });
 
       // Verify tests transformation
       expect(result?.tests).toHaveLength(2);
@@ -224,8 +244,16 @@ describe("test-runs", () => {
         skipped: 0,
         duration: 5000,
         ci_metadata: {},
-        project: { name: "test-project", display_name: "Test Project", color: "#ff0000" },
-        environment: { name: "staging", display_name: "Staging", color: "#00ff00" },
+        project: {
+          name: "test-project",
+          display_name: "Test Project",
+          color: "#ff0000",
+        },
+        environment: {
+          name: "staging",
+          display_name: "Staging",
+          color: "#00ff00",
+        },
         trigger: { name: "manual", display_name: "Manual", icon: "👤" },
       };
 
@@ -239,7 +267,11 @@ describe("test-runs", () => {
           started_at: null,
           error: null,
           screenshots: [],
-          suite_test: { id: "suite-test-3", name: "Test 3", file: "test3.spec.ts" },
+          suite_test: {
+            id: "suite-test-3",
+            name: "Test 3",
+            file: "test3.spec.ts",
+          },
         },
       ];
 
@@ -287,7 +319,10 @@ describe("test-runs", () => {
           return {
             select: () => ({
               eq: () => ({
-                single: async () => ({ data: null, error: { code: "PGRST116" } }),
+                single: async () => ({
+                  data: null,
+                  error: { code: "PGRST116" },
+                }),
               }),
             }),
           };
@@ -336,8 +371,16 @@ describe("test-runs", () => {
         skipped: 0,
         duration: 2000,
         ci_metadata: null,
-        project: { name: "test-project", display_name: "Test Project", color: "#ff0000" },
-        environment: { name: "production", display_name: "Production", color: "#00ff00" },
+        project: {
+          name: "test-project",
+          display_name: "Test Project",
+          color: "#ff0000",
+        },
+        environment: {
+          name: "production",
+          display_name: "Production",
+          color: "#00ff00",
+        },
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
@@ -408,8 +451,16 @@ describe("test-runs", () => {
         skipped: 0,
         duration: 0,
         ci_metadata: null,
-        project: { name: "test-project", display_name: "Test Project", color: "#ff0000" },
-        environment: { name: "production", display_name: "Production", color: "#00ff00" },
+        project: {
+          name: "test-project",
+          display_name: "Test Project",
+          color: "#ff0000",
+        },
+        environment: {
+          name: "production",
+          display_name: "Production",
+          color: "#00ff00",
+        },
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
@@ -464,8 +515,16 @@ describe("test-runs", () => {
         skipped: 0,
         duration: 0,
         ci_metadata: ["invalid", "array"],
-        project: { name: "test-project", display_name: "Test Project", color: "#ff0000" },
-        environment: { name: "production", display_name: "Production", color: "#00ff00" },
+        project: {
+          name: "test-project",
+          display_name: "Test Project",
+          color: "#ff0000",
+        },
+        environment: {
+          name: "production",
+          display_name: "Production",
+          color: "#00ff00",
+        },
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
@@ -538,13 +597,23 @@ describe("test-runs", () => {
         skipped: 0,
         duration: 10000,
         ci_metadata: {},
-        project: { name: "test-project", display_name: "Test Project", color: "#ff0000" },
-        environment: { name: "production", display_name: "Production", color: "#00ff00" },
+        project: {
+          name: "test-project",
+          display_name: "Test Project",
+          color: "#ff0000",
+        },
+        environment: {
+          name: "production",
+          display_name: "Production",
+          color: "#00ff00",
+        },
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
       const mockUserOrgs = [{ organization_id: "org-1" }];
-      const mockOrgProjects = [{ project_id: "proj-1", organization_id: "org-1" }];
+      const mockOrgProjects = [
+        { project_id: "proj-1", organization_id: "org-1" },
+      ];
 
       mockSupabaseClient.from.mockImplementation((table: string) => {
         if (table === "user_organizations") {
@@ -654,13 +723,23 @@ describe("test-runs", () => {
         skipped: 0,
         duration: 10000,
         ci_metadata: {},
-        project: { name: "test-project", display_name: "Test Project", color: "#ff0000" },
-        environment: { name: "production", display_name: "Production", color: "#00ff00" },
+        project: {
+          name: "test-project",
+          display_name: "Test Project",
+          color: "#ff0000",
+        },
+        environment: {
+          name: "production",
+          display_name: "Production",
+          color: "#00ff00",
+        },
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
       const mockUserOrgs = [{ organization_id: "org-1" }];
-      const mockOrgProjects = [{ project_id: "proj-1", organization_id: "org-1" }];
+      const mockOrgProjects = [
+        { project_id: "proj-1", organization_id: "org-1" },
+      ];
 
       mockSupabaseClient.from.mockImplementation((table: string) => {
         if (table === "user_organizations") {

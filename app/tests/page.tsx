@@ -66,7 +66,10 @@ export default function TestsPage() {
     "/api/environments",
     configFetcher,
   );
-  const { data: triggersData } = useSWRImmutable("/api/triggers", configFetcher);
+  const { data: triggersData } = useSWRImmutable(
+    "/api/triggers",
+    configFetcher,
+  );
 
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];

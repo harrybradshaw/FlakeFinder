@@ -38,19 +38,19 @@ const configFetcher = async (url: string) => {
 export function TestDashboard() {
   const [selectedEnvironment, setSelectedEnvironment] = useQueryState(
     "environment",
-    parseAsString.withDefault("all")
+    parseAsString.withDefault("all"),
   );
   const [selectedTrigger, setSelectedTrigger] = useQueryState(
     "trigger",
-    parseAsString.withDefault("all")
+    parseAsString.withDefault("all"),
   );
   const [selectedSuite, setSelectedSuite] = useQueryState(
     "suite",
-    parseAsString.withDefault("all")
+    parseAsString.withDefault("all"),
   );
   const [selectedTimeRange, setSelectedTimeRange] = useQueryState(
     "timeRange",
-    parseAsString.withDefault("7d")
+    parseAsString.withDefault("7d"),
   );
   const [page, setPage] = useQueryState("page", parseAsInteger.withDefault(1));
 
@@ -59,7 +59,10 @@ export function TestDashboard() {
     "/api/environments",
     configFetcher,
   );
-  const { data: triggersData } = useSWRImmutable("/api/triggers", configFetcher);
+  const { data: triggersData } = useSWRImmutable(
+    "/api/triggers",
+    configFetcher,
+  );
   const { data: suitesData } = useSWRImmutable("/api/suites", configFetcher);
 
   const environments = environmentsData?.environments || [];
@@ -85,7 +88,13 @@ export function TestDashboard() {
     }
 
     return `/api/test-runs?${params.toString()}`;
-  }, [selectedEnvironment, selectedTrigger, selectedSuite, selectedTimeRange, page]);
+  }, [
+    selectedEnvironment,
+    selectedTrigger,
+    selectedSuite,
+    selectedTimeRange,
+    page,
+  ]);
 
   // Build stats API URL (same filters but no pagination)
   const statsUrl = useMemo(() => {
@@ -107,13 +116,13 @@ export function TestDashboard() {
   }, [selectedEnvironment, selectedTrigger, selectedSuite, selectedTimeRange]);
 
   // Fetch data with SWR
-  const {
-    data,
-    error,
-    isLoading,
-  } = useSWR<{ runs: TestRun[]; total: number }>(apiUrl, fetcher, {
-    revalidateOnFocus: false,
-  });
+  const { data, error, isLoading } = useSWR<{ runs: TestRun[]; total: number }>(
+    apiUrl,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+    },
+  );
 
   // Fetch stats separately (all filtered runs, not just current page)
   const { data: statsData } = useSWR<{
@@ -301,9 +310,9 @@ export function TestDashboard() {
                         Welcome to FlakeFinder!
                       </h3>
                       <p className="text-muted-foreground mb-4">
-                        You don&apos;t have access to any projects yet. Either join
-                        an organization with existing projects, or upload your first
-                        test results to get started.
+                        You don&apos;t have access to any projects yet. Either
+                        join an organization with existing projects, or upload
+                        your first test results to get started.
                       </p>
                       <Button
                         onClick={() => {

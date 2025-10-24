@@ -9,7 +9,10 @@ export async function GET(
   try {
     const { id: testResultId } = await params;
 
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (
+      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
       return NextResponse.json(
         { error: "Storage not configured" },
         { status: 500 },
@@ -29,10 +32,7 @@ export async function GET(
       .single();
 
     if (error || !testResult?.steps_url) {
-      return NextResponse.json(
-        { error: "Steps not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "Steps not found" }, { status: 404 });
     }
 
     // Download from storage

@@ -1,30 +1,90 @@
-# Playwright test viewer
+# FlakeFinder
 
-_Automatically synced with your [v0.app](https://v0.app) deployments_
+A platform for monitoring Playwright test results and tracking flaky tests. Identify patterns, analyze trends, and improve test reliability across your team.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/lner/v0-playwright-test-viewer)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/projects/p6gPggTLTcY)
+## What It Does
 
-## Overview
+FlakeFinder helps engineering teams gain visibility into their Playwright test suites by:
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+- **📊 Visualizing Test Results** - Beautiful dashboards showing test outcomes, screenshots, error messages, and retry attempts
+- **📈 Tracking Trends** - Historical analysis of test performance and flakiness patterns over time
+- **🎯 Detecting Flaky Tests** - Automatically identifies and flags unreliable tests across multiple runs
+- **👥 Team Collaboration** - Multi-organization support with role-based access control
+- **🔍 Advanced Filtering** - Drill down by status, environment, suite, project, and more
+- **📸 Screenshot Management** - Efficient cloud storage and viewing of test screenshots
 
-## Deployment
+## Built With
 
-Your project is live at:
+- **Framework**: Next.js 15 with App Router and React Server Components
+- **UI**: shadcn/ui components with Tailwind CSS
+- **Authentication**: Clerk for secure multi-tenant auth
+- **Database**: Supabase (PostgreSQL) for scalable data storage
+- **Storage**: Supabase for screenshot and artifact management
+- **Testing**: Vitest with React Testing Library
+- **Deployment**: Vercel with edge functions
 
-**[https://vercel.com/lner/v0-playwright-test-viewer](https://vercel.com/lner/v0-playwright-test-viewer)**
+## Development
 
-## Build your app
+To run the project locally:
 
-Continue building your app on:
+```bash
+# Install dependencies
+pnpm install
 
-**[https://v0.app/chat/projects/p6gPggTLTcY](https://v0.app/chat/projects/p6gPggTLTcY)**
+# Set up environment variables
+cp .env.example .env.local
+# Configure Clerk and Supabase credentials
 
-## How It Works
+# Run the development server
+pnpm dev
+```
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+## Available Scripts
+
+- `pnpm dev` - Start development server with Turbopack
+- `pnpm build` - Build for production
+- `pnpm start` - Start production server
+- `pnpm lint` - Run ESLint
+- `pnpm test` - Run tests with Vitest
+- `pnpm test:ui` - Run tests with UI
+- `pnpm test:coverage` - Generate test coverage report
+
+## Project Structure
+
+```
+├── app/                    # Next.js app router pages
+│   ├── api/               # API routes
+│   ├── runs/              # Test run pages
+│   └── tests/             # Test detail pages
+├── components/            # React components
+│   ├── ui/               # shadcn/ui components
+│   └── ...               # Feature components
+├── lib/                   # Utility functions and helpers
+└── scripts/              # Migration and utility scripts
+```
+
+## Key Features & Architecture
+
+### API Integration
+
+The platform provides REST APIs for seamless CI/CD integration, allowing automated upload of test results from GitHub Actions, Jenkins, CircleCI, and other CI platforms.
+
+### Multi-Tenancy
+
+Built with organization-level isolation using Clerk's multi-tenant architecture, ensuring secure data separation between teams.
+
+### Performance Optimizations
+
+- Server-side rendering with React Server Components
+- Efficient screenshot storage with Supabase
+- Edge caching for static assets
+
+### Real-time Updates
+
+Track test runs as they happen with live status updates and notifications.
+
+## License
+
+MIT

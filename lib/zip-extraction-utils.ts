@@ -248,7 +248,7 @@ export async function extractTestsFromHtmlReport(
   const tests: ExtractedTest[] = [];
   let ciMetadata: CIMetadata | undefined;
   let testExecutionTime: string | undefined;
-  
+
   // Extract environment data from outer ZIP
   const environmentData = await extractEnvironmentData(zip);
 
@@ -507,7 +507,7 @@ export async function extractTestsFromJsonReport(
   zip: JSZip,
 ): Promise<ExtractionResult> {
   const tests: ExtractedTest[] = [];
-  
+
   // Extract environment data
   const environmentData = await extractEnvironmentData(zip);
 

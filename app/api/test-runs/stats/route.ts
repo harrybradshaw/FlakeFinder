@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
         failed: acc.failed + run.failed,
         flaky: acc.flaky + run.flaky,
       }),
-      { totalTests: 0, passed: 0, failed: 0, flaky: 0 }
+      { totalTests: 0, passed: 0, failed: 0, flaky: 0 },
     );
 
     return NextResponse.json(stats);
@@ -225,7 +225,7 @@ export async function GET(request: NextRequest) {
         failed: 0,
         flaky: 0,
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

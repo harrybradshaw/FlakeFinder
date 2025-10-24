@@ -30,9 +30,12 @@ describe("zip-extraction-utils", () => {
 
     // Load test report with Allure metadata
     const allureBuffer = readFileSync(
-      __dirname + "/__tests__/fixtures/playwright-report-with-allure-metadata.zip",
+      __dirname +
+        "/__tests__/fixtures/playwright-report-with-allure-metadata.zip",
     );
-    testZipWithAllureMetadata = await JSZip.loadAsync(new Uint8Array(allureBuffer));
+    testZipWithAllureMetadata = await JSZip.loadAsync(
+      new Uint8Array(allureBuffer),
+    );
   });
 
   describe("determineTestStatus", () => {
@@ -91,9 +94,7 @@ describe("zip-extraction-utils", () => {
         GITHUB_HEAD_REF: "feature-branch",
         GITHUB_REF_NAME: "main",
       };
-      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe(
-        "feature-branch",
-      );
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe("feature-branch");
     });
 
     it("should extract ticket from PR title when no CI vars and fallback is unknown", () => {
@@ -682,7 +683,9 @@ describe("zip-extraction-utils", () => {
 
       // Find test with annotations
       const testWithAnnotations = result.tests.find(
-        (t) => t.name === "should immediately remove cancelled bike reservation without page refresh"
+        (t) =>
+          t.name ===
+          "should immediately remove cancelled bike reservation without page refresh",
       );
       expect(testWithAnnotations).toBeDefined();
       expect(testWithAnnotations!.metadata).toEqual({
@@ -777,30 +780,32 @@ describe("zip-extraction-utils", () => {
 
       // Verify unique epics
       const epics = new Set(testsWithEpic.map((t) => t.metadata!.epic));
-      expect(epics).toEqual(new Set([
-        "Season Tickets",
-        "Standalone Reservations",
-        "Ticket Purchase",
-      ]));
+      expect(epics).toEqual(
+        new Set([
+          "Season Tickets",
+          "Standalone Reservations",
+          "Ticket Purchase",
+        ]),
+      );
 
       // Find a specific test with rich metadata
       const testWithMetadata = result.tests.find(
-        (t) => t.name === "Test Purchase - Smartcard"
+        (t) => t.name === "Test Purchase - Smartcard",
       );
       expect(testWithMetadata).toBeDefined();
       expect(testWithMetadata!.metadata?.epic).toBe("Season Tickets");
       expect(testWithMetadata!.metadata?.labels).toBeDefined();
       expect(testWithMetadata!.metadata?.labels!.length).toBeGreaterThan(0);
-      
+
       // Verify labels structure
       const epicLabel = testWithMetadata!.metadata?.labels?.find(
-        (l) => l.name === "epic"
+        (l) => l.name === "epic",
       );
       expect(epicLabel).toEqual({ name: "epic", value: "Season Tickets" });
 
       // Verify parameters are extracted
       const testsWithParams = result.tests.filter(
-        (t) => t.metadata?.parameters && t.metadata.parameters.length > 0
+        (t) => t.metadata?.parameters && t.metadata.parameters.length > 0,
       );
       expect(testsWithParams.length).toBe(25);
 
@@ -809,7 +814,7 @@ describe("zip-extraction-utils", () => {
         const testWithParams = testsWithParams[0];
         expect(testWithParams.metadata?.parameters).toBeDefined();
         expect(Array.isArray(testWithParams.metadata?.parameters)).toBe(true);
-        
+
         // Verify parameter structure
         const param = testWithParams.metadata!.parameters![0];
         expect(param).toHaveProperty("name");
@@ -820,7 +825,7 @@ describe("zip-extraction-utils", () => {
 
       // Verify descriptions are extracted
       const testsWithDescription = result.tests.filter(
-        (t) => t.metadata?.description || t.metadata?.descriptionHtml
+        (t) => t.metadata?.description || t.metadata?.descriptionHtml,
       );
       expect(testsWithDescription.length).toBeGreaterThan(0);
 

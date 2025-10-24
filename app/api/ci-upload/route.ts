@@ -126,7 +126,9 @@ export async function POST(request: NextRequest) {
 
     // 7. Store in database
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-      console.log(`${LOG_PREFIX} Supabase not configured, skipping database storage`);
+      console.log(
+        `${LOG_PREFIX} Supabase not configured, skipping database storage`,
+      );
       return NextResponse.json({
         success: true,
         testRun: {

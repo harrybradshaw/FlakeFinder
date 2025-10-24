@@ -37,7 +37,7 @@ const TestStepSchema: z.ZodType<any> = z.lazy(() =>
     error: z.union([ErrorSchema, z.string()]).optional(), // Can be object or string
     location: LocationSchema.optional(),
     steps: z.array(TestStepSchema).optional(), // Recursive for nested steps
-  })
+  }),
 );
 
 // Schema for test result - be lenient with unknown fields

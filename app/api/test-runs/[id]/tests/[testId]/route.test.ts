@@ -91,7 +91,9 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
       return {};
     });
 
-    const request = new NextRequest("http://localhost:3000/api/test-runs/run-789/tests/suite-test-456");
+    const request = new NextRequest(
+      "http://localhost:3000/api/test-runs/run-789/tests/suite-test-456",
+    );
     const params = Promise.resolve({ id: "run-789", testId: "suite-test-456" });
 
     const response = await GET(request, { params });
@@ -148,7 +150,9 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
       }),
     }));
 
-    const request = new NextRequest("http://localhost:3000/api/test-runs/run-789/tests/suite-test-456");
+    const request = new NextRequest(
+      "http://localhost:3000/api/test-runs/run-789/tests/suite-test-456",
+    );
     const params = Promise.resolve({ id: "run-789", testId: "suite-test-456" });
 
     const response = await GET(request, { params });
@@ -203,7 +207,9 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
       return {};
     });
 
-    const request = new NextRequest("http://localhost:3000/api/test-runs/run-789/tests/suite-test-456");
+    const request = new NextRequest(
+      "http://localhost:3000/api/test-runs/run-789/tests/suite-test-456",
+    );
     const params = Promise.resolve({ id: "run-789", testId: "suite-test-456" });
 
     const response = await GET(request, { params });
@@ -217,7 +223,9 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_ANON_KEY;
 
-    const request = new NextRequest("http://localhost:3000/api/test-runs/run-789/tests/suite-test-456");
+    const request = new NextRequest(
+      "http://localhost:3000/api/test-runs/run-789/tests/suite-test-456",
+    );
     const params = Promise.resolve({ id: "run-789", testId: "suite-test-456" });
 
     const response = await GET(request, { params });

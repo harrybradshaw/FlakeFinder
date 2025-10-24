@@ -16,15 +16,75 @@ describe("report-optimization", () => {
 
     // Create a minimal valid 1x1 PNG (89 50 4E 47 header + minimal data)
     const validPng = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
-      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, // IHDR chunk
-      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, // 1x1 dimensions
-      0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, // bit depth, color type, CRC
-      0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, // IDAT chunk
-      0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00, // image data
-      0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, // data + CRC
-      0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, // IEND chunk
-      0x44, 0xae, 0x42, 0x60, 0x82                    // IEND + CRC
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x0d,
+      0x0a,
+      0x1a,
+      0x0a, // PNG signature
+      0x00,
+      0x00,
+      0x00,
+      0x0d,
+      0x49,
+      0x48,
+      0x44,
+      0x52, // IHDR chunk
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x01, // 1x1 dimensions
+      0x08,
+      0x02,
+      0x00,
+      0x00,
+      0x00,
+      0x90,
+      0x77,
+      0x53, // bit depth, color type, CRC
+      0xde,
+      0x00,
+      0x00,
+      0x00,
+      0x0c,
+      0x49,
+      0x44,
+      0x41, // IDAT chunk
+      0x54,
+      0x08,
+      0xd7,
+      0x63,
+      0xf8,
+      0xcf,
+      0xc0,
+      0x00, // image data
+      0x00,
+      0x03,
+      0x01,
+      0x01,
+      0x00,
+      0x18,
+      0xdd,
+      0x8d, // data + CRC
+      0xb4,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x49,
+      0x45,
+      0x4e, // IEND chunk
+      0x44,
+      0xae,
+      0x42,
+      0x60,
+      0x82, // IEND + CRC
     ]);
 
     // Add screenshots (should be kept)
@@ -33,7 +93,10 @@ describe("report-optimization", () => {
     mockZip.file("data/screenshot-3.jpg", Buffer.from("fake-jpg-data"));
 
     // Add files that should be removed
-    mockZip.file("data/trace.zip", Buffer.from("large-trace-data".repeat(1000)));
+    mockZip.file(
+      "data/trace.zip",
+      Buffer.from("large-trace-data".repeat(1000)),
+    );
     mockZip.file("data/trace/trace-1.trace", Buffer.from("trace-content"));
     mockZip.file("data/video.webm", Buffer.from("video-data".repeat(500)));
     mockZip.file("data/network.har", Buffer.from("har-content"));
@@ -117,7 +180,9 @@ describe("report-optimization", () => {
       const { buffer } = await optimizePlaywrightReport(mockZipBuffer);
       const optimizedZip = await JSZip.loadAsync(buffer);
 
-      const htmlContent = await optimizedZip.file("index.html")!.async("string");
+      const htmlContent = await optimizedZip
+        .file("index.html")!
+        .async("string");
       expect(htmlContent).toBe("<html>Report</html>");
     });
   });
@@ -204,12 +269,18 @@ describe("report-optimization", () => {
     });
 
     it("should respect imageQuality option", async () => {
-      const { stats: highStats } = await optimizePlaywrightReport(mockZipBuffer, {
-        imageQuality: 95,
-      });
-      const { stats: lowStats } = await optimizePlaywrightReport(mockZipBuffer, {
-        imageQuality: 50,
-      });
+      const { stats: highStats } = await optimizePlaywrightReport(
+        mockZipBuffer,
+        {
+          imageQuality: 95,
+        },
+      );
+      const { stats: lowStats } = await optimizePlaywrightReport(
+        mockZipBuffer,
+        {
+          imageQuality: 50,
+        },
+      );
 
       // Both should compress the same number of images
       expect(highStats.imagesCompressed).toBe(2);
@@ -220,17 +291,19 @@ describe("report-optimization", () => {
       // Create a ZIP with an invalid PNG
       const zipWithBadImage = new JSZip();
       zipWithBadImage.file("data/screenshot-bad.png", "not-a-real-png");
-      const badBuffer = await zipWithBadImage.generateAsync({ type: "nodebuffer" });
+      const badBuffer = await zipWithBadImage.generateAsync({
+        type: "nodebuffer",
+      });
 
       const { buffer } = await optimizePlaywrightReport(badBuffer);
-      
+
       // Should not crash, and original file should be kept
       expect(buffer).toBeDefined();
       const optimizedZip = await JSZip.loadAsync(buffer);
       // Original PNG should be kept on failure
       expect(
         optimizedZip.file("data/screenshot-bad.png") ||
-        optimizedZip.file("data/screenshot-bad.jpg")
+          optimizedZip.file("data/screenshot-bad.jpg"),
       ).not.toBeNull();
     });
   });
@@ -293,7 +366,9 @@ describe("report-optimization", () => {
       const minimalZip = new JSZip();
       minimalZip.file("index.html", "<html></html>");
       minimalZip.file("report.json", "{}");
-      const minimalBuffer = await minimalZip.generateAsync({ type: "nodebuffer" });
+      const minimalBuffer = await minimalZip.generateAsync({
+        type: "nodebuffer",
+      });
 
       const { stats } = await optimizePlaywrightReport(minimalBuffer);
 
@@ -303,8 +378,9 @@ describe("report-optimization", () => {
 
     it("should handle already optimized report", async () => {
       // First optimization
-      const { buffer: firstOptimized } = await optimizePlaywrightReport(mockZipBuffer);
-      
+      const { buffer: firstOptimized } =
+        await optimizePlaywrightReport(mockZipBuffer);
+
       // Second optimization of already optimized file
       const { stats } = await optimizePlaywrightReport(firstOptimized);
 
@@ -315,7 +391,9 @@ describe("report-optimization", () => {
       const nestedZip = new JSZip();
       nestedZip.file("data/deep/nested/path/file.zip", "trace-data");
       nestedZip.file("data/deep/nested/path/screenshot.png", "image");
-      const nestedBuffer = await nestedZip.generateAsync({ type: "nodebuffer" });
+      const nestedBuffer = await nestedZip.generateAsync({
+        type: "nodebuffer",
+      });
 
       const { buffer } = await optimizePlaywrightReport(nestedBuffer);
       const optimizedZip = await JSZip.loadAsync(buffer);
@@ -323,7 +401,9 @@ describe("report-optimization", () => {
       // ZIP files in data/ directory should be removed (matches /data\/.*\.zip$/)
       expect(optimizedZip.file("data/deep/nested/path/file.zip")).toBeNull();
       // Screenshot should be kept
-      expect(optimizedZip.file("data/deep/nested/path/screenshot.png")).not.toBeNull();
+      expect(
+        optimizedZip.file("data/deep/nested/path/screenshot.png"),
+      ).not.toBeNull();
     });
 
     it("should maintain ZIP file validity", async () => {
@@ -340,7 +420,9 @@ describe("report-optimization", () => {
       similarZip.file("data/trace.png", "not-a-trace");
       similarZip.file("data/my-video.webm", "video");
       similarZip.file("data/video-thumbnail.png", "not-a-video");
-      const similarBuffer = await similarZip.generateAsync({ type: "nodebuffer" });
+      const similarBuffer = await similarZip.generateAsync({
+        type: "nodebuffer",
+      });
 
       const { buffer } = await optimizePlaywrightReport(similarBuffer);
       const optimizedZip = await JSZip.loadAsync(buffer);
@@ -348,7 +430,7 @@ describe("report-optimization", () => {
       // Should remove .zip and .webm
       expect(optimizedZip.file("data/trace.zip")).toBeNull();
       expect(optimizedZip.file("data/my-video.webm")).toBeNull();
-      
+
       // Should keep .png files
       expect(optimizedZip.file("data/trace.png")).not.toBeNull();
       expect(optimizedZip.file("data/video-thumbnail.png")).not.toBeNull();
@@ -369,7 +451,10 @@ describe("report-optimization", () => {
       // Create a larger mock report
       const largeZip = new JSZip();
       for (let i = 0; i < 50; i++) {
-        largeZip.file(`data/screenshot-${i}.png`, Buffer.from("image-data".repeat(100)));
+        largeZip.file(
+          `data/screenshot-${i}.png`,
+          Buffer.from("image-data".repeat(100)),
+        );
       }
       largeZip.file("data/trace.zip", Buffer.from("trace".repeat(10000)));
       const largeBuffer = await largeZip.generateAsync({ type: "nodebuffer" });
@@ -386,20 +471,29 @@ describe("report-optimization", () => {
   describe("Verbose Mode", () => {
     it("should accept verbose option without error", async () => {
       await expect(
-        optimizePlaywrightReport(mockZipBuffer, { verbose: true })
+        optimizePlaywrightReport(mockZipBuffer, { verbose: true }),
       ).resolves.toBeDefined();
     });
 
     it("should produce same result regardless of verbose setting", async () => {
-      const { stats: quietStats } = await optimizePlaywrightReport(mockZipBuffer, {
-        verbose: false,
-      });
-      const { stats: verboseStats } = await optimizePlaywrightReport(mockZipBuffer, {
-        verbose: true,
-      });
+      const { stats: quietStats } = await optimizePlaywrightReport(
+        mockZipBuffer,
+        {
+          verbose: false,
+        },
+      );
+      const { stats: verboseStats } = await optimizePlaywrightReport(
+        mockZipBuffer,
+        {
+          verbose: true,
+        },
+      );
 
       expect(quietStats.filesRemoved).toBe(verboseStats.filesRemoved);
-      expect(quietStats.compressionRatio).toBeCloseTo(verboseStats.compressionRatio, 2);
+      expect(quietStats.compressionRatio).toBeCloseTo(
+        verboseStats.compressionRatio,
+        2,
+      );
     });
   });
 

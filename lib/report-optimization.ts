@@ -99,36 +99,45 @@ export async function optimizePlaywrightReport(
       stats.bytesRemoved += fileSize;
     } else {
       const content = await zipFile.async("nodebuffer");
-      
+
       // Compress PNG screenshots to JPEG
-      const isPngScreenshot = /\.png$/i.test(path) && 
+      const isPngScreenshot =
+        /\.png$/i.test(path) &&
         (path.includes("screenshot") || path.includes("data/"));
-      
+
       if (isPngScreenshot && opts.compressImages) {
         try {
           // Dynamically import sharp (it's an optional dependency)
           const sharp = (await import("sharp")).default;
           const originalSize = content.length;
-          
+
           const compressed = await sharp(content)
             .jpeg({ quality: opts.imageQuality })
             .toBuffer();
-          
+
           // Change extension to .jpg
           const newPath = path.replace(/\.png$/i, ".jpg");
           optimizedZip.file(newPath, compressed);
-          
+
           stats.imagesCompressed++;
           stats.imageBytesSaved += originalSize - compressed.length;
-          
+
           if (opts.verbose) {
-            const saved = ((originalSize - compressed.length) / originalSize * 100).toFixed(1);
-            console.log(`[Optimize] Compressed ${path} -> ${newPath} (saved ${saved}%)`);
+            const saved = (
+              ((originalSize - compressed.length) / originalSize) *
+              100
+            ).toFixed(1);
+            console.log(
+              `[Optimize] Compressed ${path} -> ${newPath} (saved ${saved}%)`,
+            );
           }
         } catch (error) {
           // Fallback: keep original if sharp is not available or compression fails
           if (opts.verbose) {
-            console.warn(`[Optimize] Failed to compress ${path}, keeping original:`, error);
+            console.warn(
+              `[Optimize] Failed to compress ${path}, keeping original:`,
+              error,
+            );
           }
           optimizedZip.file(path, content);
         }

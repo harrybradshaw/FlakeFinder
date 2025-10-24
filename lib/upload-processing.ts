@@ -168,24 +168,30 @@ export async function processTestSteps(
   }
 
   // Helper function to recursively find the last failed step
-  function findLastFailedStep(steps: unknown[]): StepsUploadResult["lastFailedStep"] {
+  function findLastFailedStep(
+    steps: unknown[],
+  ): StepsUploadResult["lastFailedStep"] {
     for (let i = steps.length - 1; i >= 0; i--) {
       const step = steps[i] as Record<string, unknown>;
-      
+
       // Check nested steps first (depth-first search from end)
       if (step.steps && Array.isArray(step.steps)) {
         const nestedFailed = findLastFailedStep(step.steps);
         if (nestedFailed) return nestedFailed;
       }
-      
+
       // Check if this step has an error
       if (step.error) {
         return {
           title: String(step.title || "Unknown step"),
           duration: Number(step.duration || 0),
-          error: typeof step.error === 'string' 
-            ? step.error 
-            : String((step.error as Record<string, unknown>)?.message || step.error),
+          error:
+            typeof step.error === "string"
+              ? step.error
+              : String(
+                  (step.error as Record<string, unknown>)?.message ||
+                    step.error,
+                ),
         };
       }
     }
@@ -214,10 +220,10 @@ export async function processTestSteps(
 
       // Generate unique path
       const stepsPath = `${testRunId}/${testId}-${retryIndex}.json`;
-      
+
       // Convert steps to JSON buffer
       const stepsJson = JSON.stringify(steps, null, 2);
-      const stepsBuffer = Buffer.from(stepsJson, 'utf-8');
+      const stepsBuffer = Buffer.from(stepsJson, "utf-8");
 
       // Upload to storage
       const { error: uploadError } = await supabaseAdmin.storage
@@ -234,7 +240,7 @@ export async function processTestSteps(
       }
 
       console.log(`${logPrefix} Uploaded steps to storage:`, stepsPath);
-      
+
       return {
         stepsUrl: stepsPath,
         lastFailedStep,
@@ -245,7 +251,9 @@ export async function processTestSteps(
     }
   }
 
-  console.log(`${logPrefix} Supabase Storage not configured, skipping steps upload`);
+  console.log(
+    `${logPrefix} Supabase Storage not configured, skipping steps upload`,
+  );
   return { stepsUrl: null, lastFailedStep };
 }
 
@@ -264,7 +272,7 @@ export async function processTestsFromZip(
     await extractTestsFromZip(zip);
 
   console.log(`${logPrefix} Extracted tests:`, tests.length);
-  
+
   if (environmentData) {
     console.log(`${logPrefix} Found environment data:`, environmentData);
   }
@@ -755,8 +763,8 @@ export async function insertTestRun(params: {
             screenshots: attempt.screenshots,
             attachments: attempt.attachments || [],
             started_at: attempt.startTime,
-            steps_url: stepsUrl,  // Store URL instead of full steps
-            last_failed_step: lastFailedStep,  // Store summary
+            steps_url: stepsUrl, // Store URL instead of full steps
+            last_failed_step: lastFailedStep, // Store summary
           });
         }
       }

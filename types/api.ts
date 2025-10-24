@@ -140,6 +140,7 @@ export interface TestHistoryItem {
   timestamp: string;
   status: string;
   duration: number;
+  attempts?: number;
   environment?: string;
   trigger?: string;
   branch?: string;

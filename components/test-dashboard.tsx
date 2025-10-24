@@ -387,20 +387,12 @@ export function TestDashboard() {
           </TabsContent>
 
           <TabsContent value="trends" className="mt-6">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-muted-foreground">Loading trends...</p>
-              </div>
-            ) : error ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-destructive">Error: {error.message}</p>
-              </div>
-            ) : (
-              <TrendsChart
-                runs={testRuns || []}
-                timeRange={selectedTimeRange}
-              />
-            )}
+            <TrendsChart
+              timeRange={selectedTimeRange}
+              environment={selectedEnvironment}
+              trigger={selectedTrigger}
+              suite={selectedSuite}
+            />
           </TabsContent>
         </Tabs>
       </main>

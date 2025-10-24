@@ -109,7 +109,7 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
     failed: testRun.failed,
     flaky: testRun.flaky,
     skipped: testRun.skipped,
-    duration: formatDuration(testRun.duration),
+    duration: formatDuration(testRun.wall_clock_duration || testRun.duration),
     ci_metadata:
       typeof testRun.ci_metadata === "object" &&
       testRun.ci_metadata !== null &&
@@ -313,7 +313,7 @@ export async function getTestRun(
     failed: testRun.failed,
     flaky: testRun.flaky,
     skipped: testRun.skipped,
-    duration: formatDuration(testRun.duration),
+    duration: formatDuration(testRun.wall_clock_duration || testRun.duration),
     ci_metadata:
       typeof testRun.ci_metadata === "object" &&
       testRun.ci_metadata !== null &&

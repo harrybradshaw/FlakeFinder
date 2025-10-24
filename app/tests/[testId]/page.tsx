@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { TestCaseDetails } from "@/components/test-case-details";
+import { FailurePatterns } from "@/components/failure-patterns";
 import {
   LineChart,
   Line,
@@ -293,6 +294,8 @@ export default function TestDetailPage({
         failed: number;
         flaky: number;
         skipped: number;
+        totalDuration: number;
+        count: number;
       }
     >();
 
@@ -308,6 +311,8 @@ export default function TestDetailPage({
           failed: 0,
           flaky: 0,
           skipped: 0,
+          totalDuration: 0,
+          count: 0,
         });
       }
       const stats = dailyStats.get(date)!;
@@ -325,11 +330,24 @@ export default function TestDetailPage({
           stats.skipped++;
           break;
       }
+      // Add duration tracking - divide by attempts to get per-attempt average
+      if (item.duration && item.attempts) {
+        stats.totalDuration += item.duration / item.attempts;
+        stats.count++;
+      }
     });
 
-    return Array.from(dailyStats.values()).sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
+    return Array.from(dailyStats.values())
+      .map((stats) => ({
+        date: stats.date,
+        passed: stats.passed,
+        failed: stats.failed,
+        flaky: stats.flaky,
+        skipped: stats.skipped,
+        // Duration is already in milliseconds, convert to seconds
+        avgDuration: stats.count > 0 ? Math.round(stats.totalDuration / stats.count / 1000) : 0,
+      }))
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [data]);
 
   return (
@@ -469,60 +487,114 @@ export default function TestDetailPage({
               </Card>
             </div>
 
-            {/* Chart */}
+            {/* Charts */}
             {chartData && chartData.length > 0 && (
-              <Card className="p-6 mb-6">
-                <h3 className="text-lg font-semibold mb-4">
-                  Test Results Over Time
-                </h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="hsl(var(--border))"
-                    />
-                    <XAxis
-                      dataKey="date"
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                    />
-                    <YAxis
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="passed"
-                      stroke="#22c55e"
-                      strokeWidth={2}
-                      dot={{ fill: "#22c55e" }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="failed"
-                      stroke="#ef4444"
-                      strokeWidth={2}
-                      dot={{ fill: "#ef4444" }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="flaky"
-                      stroke="#eab308"
-                      strokeWidth={2}
-                      dot={{ fill: "#eab308" }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </Card>
+              <div className="grid grid-cols-3 gap-6 mb-6">
+                {/* Test Results Chart - 2/3 width */}
+                <Card className="p-6 col-span-2">
+                  <h3 className="text-lg font-semibold mb-4">
+                    Test Results Over Time
+                  </h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="hsl(var(--border))"
+                      />
+                      <XAxis
+                        dataKey="date"
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--popover))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                      />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="passed"
+                        stroke="#22c55e"
+                        strokeWidth={2}
+                        dot={{ fill: "#22c55e" }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="failed"
+                        stroke="#ef4444"
+                        strokeWidth={2}
+                        dot={{ fill: "#ef4444" }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="flaky"
+                        stroke="#eab308"
+                        strokeWidth={2}
+                        dot={{ fill: "#eab308" }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                {/* Duration Trend Chart - 1/3 width */}
+                <Card className="p-6 col-span-1">
+                  <h3 className="text-lg font-semibold mb-4">
+                    Duration Trend
+                  </h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="hsl(var(--border))"
+                      />
+                      <XAxis
+                        dataKey="date"
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                        label={{ value: 's', angle: -90, position: 'insideLeft' }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--popover))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                        formatter={(value: number) => [`${value}s`, 'Duration']}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="avgDuration"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        dot={{ fill: "#3b82f6" }}
+                        name="Avg Duration"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+              </div>
             )}
+
+            {/* Failure Patterns */}
+            <div className="mb-6">
+              <FailurePatterns
+                timeRange={selectedTimeRange}
+                environment={selectedEnvironment}
+                trigger={selectedTrigger}
+                testId={resolvedParams.testId}
+              />
+            </div>
 
             {/* Recent History */}
             <Card className="p-6">

@@ -1,0 +1,202 @@
+import { type NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { type Database } from "@/types/supabase";
+import { groupRunsByDay } from "@/lib/trends-utils";
+
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const project = searchParams.get("project");
+    const environment = searchParams.get("environment");
+    const trigger = searchParams.get("trigger");
+    const suite = searchParams.get("suite");
+    const timeRange = searchParams.get("timeRange") || "7d";
+    const groupBy = searchParams.get("groupBy") || "daily"; // 'daily' or 'individual'
+
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+      return NextResponse.json({ trends: [] });
+    }
+
+    const { userId } = await auth();
+
+    if (!userId) {
+      return NextResponse.json({ trends: [] });
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient<Database>(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+    );
+
+    // Get user's organizations
+    const { data: userOrgs } = await supabase
+      .from("user_organizations")
+      .select("organization_id")
+      .eq("user_id", userId);
+
+    const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
+
+    if (userOrgIds.length === 0) {
+      return NextResponse.json({ trends: [] });
+    }
+
+    // Get accessible projects
+    const { data: orgProjects } = await supabase
+      .from("organization_projects")
+      .select("project_id")
+      .in("organization_id", userOrgIds);
+
+    const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || [];
+
+    if (accessibleProjectIds.length === 0) {
+      return NextResponse.json({ trends: [] });
+    }
+
+    // Calculate time range
+    const now = new Date();
+    const startDate = new Date();
+    switch (timeRange) {
+      case "24h":
+        startDate.setHours(now.getHours() - 24);
+        break;
+      case "7d":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "30d":
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case "90d":
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 7);
+    }
+
+    // Look up filter IDs
+    let projectId = null;
+    let environmentId = null;
+    let triggerId = null;
+    let suiteId = null;
+
+    if (project && project !== "all") {
+      const { data: projData } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("name", project)
+        .eq("active", true)
+        .single();
+      if (projData) projectId = projData.id;
+    }
+
+    if (environment && environment !== "all") {
+      const { data: envData } = await supabase
+        .from("environments")
+        .select("id")
+        .eq("name", environment)
+        .eq("active", true)
+        .single();
+      if (envData) environmentId = envData.id;
+    }
+
+    if (trigger && trigger !== "all") {
+      const { data: trigData } = await supabase
+        .from("test_triggers")
+        .select("id")
+        .eq("name", trigger)
+        .eq("active", true)
+        .single();
+      if (trigData) triggerId = trigData.id;
+    }
+
+    if (suite && suite !== "all") {
+      const { data: suiteData } = await supabase
+        .from("suites")
+        .select("id")
+        .eq("name", suite)
+        .eq("active", true)
+        .single();
+      if (suiteData) suiteId = suiteData.id;
+    }
+
+    // Build query
+    let query = supabase
+      .from("test_runs")
+      .select("id, timestamp, total, passed, failed, flaky, wall_clock_duration")
+      .in("project_id", accessibleProjectIds)
+      .gte("timestamp", startDate.toISOString())
+      .order("timestamp", { ascending: true });
+
+    if (projectId) {
+      if (!accessibleProjectIds.includes(projectId)) {
+        return NextResponse.json({ trends: [] });
+      }
+      query = query.eq("project_id", projectId);
+    }
+    if (environmentId) {
+      query = query.eq("environment_id", environmentId);
+    }
+    if (triggerId) {
+      query = query.eq("trigger_id", triggerId);
+    }
+
+    // Handle suite filter
+    if (suiteId) {
+      const { data: suiteTestIds } = await supabase
+        .from("suite_tests")
+        .select("id")
+        .eq("suite_id", suiteId);
+
+      const suiteTestIdList = suiteTestIds?.map((st) => st.id) || [];
+
+      if (suiteTestIdList.length === 0) {
+        return NextResponse.json({ trends: [] });
+      }
+
+      const { data: testsInSuite } = await supabase
+        .from("tests")
+        .select("test_run_id")
+        .in("suite_test_id", suiteTestIdList);
+
+      const testRunIdsInSuite = [
+        ...new Set(testsInSuite?.map((t) => t.test_run_id) || []),
+      ];
+
+      if (testRunIdsInSuite.length === 0) {
+        return NextResponse.json({ trends: [] });
+      }
+
+      query = query.in("id", testRunIdsInSuite);
+    }
+
+    // Execute query
+    const { data: runs } = await query;
+
+    if (!runs || runs.length === 0) {
+      return NextResponse.json({ trends: [] });
+    }
+
+    // Process data based on groupBy parameter
+    let trends;
+
+    if (groupBy === "daily") {
+      // Use utility function for grouping and aggregation
+      trends = groupRunsByDay(runs);
+    } else {
+      // Return individual runs
+      trends = runs.map((run) => ({
+        date: run.timestamp,
+        timestamp: run.timestamp,
+        passed: run.passed,
+        failed: run.failed,
+        flaky: run.flaky,
+        total: run.total,
+      }));
+    }
+
+    return NextResponse.json({ trends });
+  } catch (error) {
+    console.error("[API] Error fetching trends:", error);
+    return NextResponse.json({ trends: [] }, { status: 500 });
+  }
+}

@@ -17,6 +17,7 @@ import {
   type EnvironmentData,
 } from "@/lib/zip-extraction-utils";
 import { calculateContentHash } from "@/lib/playwright-report-utils";
+import { calculateWallClockDuration } from "./wall-clock-duration";
 
 export interface ScreenshotUploadResult {
   screenshotUrls: Record<string, string>;
@@ -633,6 +634,19 @@ export async function insertTestRun(params: {
   } = params;
 
   try {
+    // Calculate wall-clock duration from test timings
+    const wallClockDuration = calculateWallClockDuration(
+      processedData.tests.map((t) => ({
+        started_at: t.started_at || new Date().toISOString(),
+        duration: t.duration,
+      }))
+    );
+
+    console.log(`${logPrefix} Calculated durations:`, {
+      totalDuration: processedData.totalDuration,
+      wallClockDuration,
+    });
+
     // Insert test run
     const { data: runData, error: runError } = await supabase
       .from("test_runs")
@@ -648,6 +662,7 @@ export async function insertTestRun(params: {
         flaky: processedData.stats.flaky,
         skipped: processedData.stats.skipped,
         duration: processedData.totalDuration,
+        wall_clock_duration: wallClockDuration,
         timestamp: processedData.timestamp,
         ci_metadata: processedData.ciMetadata as any, // Type cast for JSON field
         environment_data: processedData.environmentData as any, // Type cast for JSON field

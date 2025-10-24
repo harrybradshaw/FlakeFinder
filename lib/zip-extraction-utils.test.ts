@@ -11,6 +11,7 @@ import {
   mapScreenshotPaths,
   calculateTestStats,
   formatDuration,
+  extractEnvironmentData,
   ENVIRONMENT_MAPPING,
   type CIMetadata,
   type ExtractedTest,
@@ -29,9 +30,12 @@ describe("zip-extraction-utils", () => {
 
     // Load test report with Allure metadata
     const allureBuffer = readFileSync(
-      __dirname + "/__tests__/fixtures/playwright-report-with-allure-metadata.zip",
+      __dirname +
+        "/__tests__/fixtures/playwright-report-with-allure-metadata.zip",
     );
-    testZipWithAllureMetadata = await JSZip.loadAsync(new Uint8Array(allureBuffer));
+    testZipWithAllureMetadata = await JSZip.loadAsync(
+      new Uint8Array(allureBuffer),
+    );
   });
 
   describe("determineTestStatus", () => {
@@ -90,9 +94,7 @@ describe("zip-extraction-utils", () => {
         GITHUB_HEAD_REF: "feature-branch",
         GITHUB_REF_NAME: "main",
       };
-      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe(
-        "feature-branch",
-      );
+      expect(extractBranchFromCI(ciMetadata, "unknown")).toBe("feature-branch");
     });
 
     it("should extract ticket from PR title when no CI vars and fallback is unknown", () => {
@@ -681,7 +683,9 @@ describe("zip-extraction-utils", () => {
 
       // Find test with annotations
       const testWithAnnotations = result.tests.find(
-        (t) => t.name === "should immediately remove cancelled bike reservation without page refresh"
+        (t) =>
+          t.name ===
+          "should immediately remove cancelled bike reservation without page refresh",
       );
       expect(testWithAnnotations).toBeDefined();
       expect(testWithAnnotations!.metadata).toEqual({
@@ -776,30 +780,32 @@ describe("zip-extraction-utils", () => {
 
       // Verify unique epics
       const epics = new Set(testsWithEpic.map((t) => t.metadata!.epic));
-      expect(epics).toEqual(new Set([
-        "Season Tickets",
-        "Standalone Reservations",
-        "Ticket Purchase",
-      ]));
+      expect(epics).toEqual(
+        new Set([
+          "Season Tickets",
+          "Standalone Reservations",
+          "Ticket Purchase",
+        ]),
+      );
 
       // Find a specific test with rich metadata
       const testWithMetadata = result.tests.find(
-        (t) => t.name === "Test Purchase - Smartcard"
+        (t) => t.name === "Test Purchase - Smartcard",
       );
       expect(testWithMetadata).toBeDefined();
       expect(testWithMetadata!.metadata?.epic).toBe("Season Tickets");
       expect(testWithMetadata!.metadata?.labels).toBeDefined();
       expect(testWithMetadata!.metadata?.labels!.length).toBeGreaterThan(0);
-      
+
       // Verify labels structure
       const epicLabel = testWithMetadata!.metadata?.labels?.find(
-        (l) => l.name === "epic"
+        (l) => l.name === "epic",
       );
       expect(epicLabel).toEqual({ name: "epic", value: "Season Tickets" });
 
       // Verify parameters are extracted
       const testsWithParams = result.tests.filter(
-        (t) => t.metadata?.parameters && t.metadata.parameters.length > 0
+        (t) => t.metadata?.parameters && t.metadata.parameters.length > 0,
       );
       expect(testsWithParams.length).toBe(25);
 
@@ -808,7 +814,7 @@ describe("zip-extraction-utils", () => {
         const testWithParams = testsWithParams[0];
         expect(testWithParams.metadata?.parameters).toBeDefined();
         expect(Array.isArray(testWithParams.metadata?.parameters)).toBe(true);
-        
+
         // Verify parameter structure
         const param = testWithParams.metadata!.parameters![0];
         expect(param).toHaveProperty("name");
@@ -819,7 +825,7 @@ describe("zip-extraction-utils", () => {
 
       // Verify descriptions are extracted
       const testsWithDescription = result.tests.filter(
-        (t) => t.metadata?.description || t.metadata?.descriptionHtml
+        (t) => t.metadata?.description || t.metadata?.descriptionHtml,
       );
       expect(testsWithDescription.length).toBeGreaterThan(0);
 
@@ -841,6 +847,98 @@ describe("zip-extraction-utils", () => {
       expect(ENVIRONMENT_MAPPING.prod).toBe("production");
       expect(ENVIRONMENT_MAPPING.stage).toBe("staging");
       expect(ENVIRONMENT_MAPPING.test).toBe("testing");
+    });
+  });
+
+  describe("extractEnvironmentData", () => {
+    it("should extract valid environment.json from zip", async () => {
+      const zip = new JSZip();
+      const environmentData = {
+        tramVersion: "ef3f368c",
+        tramInfraVersion: "ad43c4e5",
+        paymentsVersion: "90670f95",
+        authVersion: "7bf9957e",
+        nodeVersion: "v20.19.5",
+        playwrightVersion: "1.52.0",
+        environment: "preview",
+        branch: "WS-3059",
+        commit: "d37003c978dc641ef19d961b255f4a42d74702fc",
+      };
+      zip.file("environment.json", JSON.stringify(environmentData));
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(result?.tramVersion).toBe("ef3f368c");
+      expect(result?.tramInfraVersion).toBe("ad43c4e5");
+      expect(result?.paymentsVersion).toBe("90670f95");
+      expect(result?.authVersion).toBe("7bf9957e");
+      expect(result?.nodeVersion).toBe("v20.19.5");
+      expect(result?.playwrightVersion).toBe("1.52.0");
+      expect(result?.environment).toBe("preview");
+      expect(result?.branch).toBe("WS-3059");
+      expect(result?.commit).toBe("d37003c978dc641ef19d961b255f4a42d74702fc");
+    });
+
+    it("should return undefined when environment.json is missing", async () => {
+      const zip = new JSZip();
+      zip.file("some-other-file.txt", "content");
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("should handle invalid JSON gracefully", async () => {
+      const zip = new JSZip();
+      zip.file("environment.json", "{ invalid json }");
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("should handle empty environment.json", async () => {
+      const zip = new JSZip();
+      zip.file("environment.json", "{}");
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(Object.keys(result!).length).toBe(0);
+    });
+
+    it("should handle partial environment data", async () => {
+      const zip = new JSZip();
+      const partialData = {
+        tramVersion: "abc123",
+        nodeVersion: "v18.0.0",
+      };
+      zip.file("environment.json", JSON.stringify(partialData));
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(result?.tramVersion).toBe("abc123");
+      expect(result?.nodeVersion).toBe("v18.0.0");
+      expect(result?.paymentsVersion).toBeUndefined();
+    });
+
+    it("should handle custom fields in environment data", async () => {
+      const zip = new JSZip();
+      const customData = {
+        tramVersion: "abc123",
+        customField: "customValue",
+        anotherField: 12345,
+      };
+      zip.file("environment.json", JSON.stringify(customData));
+
+      const result = await extractEnvironmentData(zip);
+
+      expect(result).toBeDefined();
+      expect(result?.tramVersion).toBe("abc123");
+      expect(result?.customField).toBe("customValue");
+      expect(result?.anotherField).toBe(12345);
     });
   });
 });

@@ -9,6 +9,7 @@ This directory contains sample data files used in unit tests.
 A real Playwright HTML report used for testing the zip extraction utilities.
 
 **Structure:**
+
 ```
 playwright-report-sample.zip
 ├── index.html          # HTML report with embedded test data
@@ -19,6 +20,7 @@ playwright-report-sample.zip
 ```
 
 **Contains:**
+
 - Multiple test results (passed, failed, flaky)
 - CI metadata
 - Test execution timestamps
@@ -26,6 +28,7 @@ playwright-report-sample.zip
 - Retry results for flaky tests
 
 **Used by:**
+
 - `lib/zip-extraction-utils.test.ts`
 
 **Source:** Generated from a real Playwright test run

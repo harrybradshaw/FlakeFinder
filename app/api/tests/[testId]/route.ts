@@ -123,12 +123,14 @@ export async function GET(
 
     const runIds = runs.map((r) => r.id);
 
-    const { data: tests, error: testsError } = await supabase
+    const { data: tests, error: testsError} = await supabase
       .from("tests")
       .select(
         `
+        id,
         status, 
-        duration, 
+        duration,
+        attempts,
         test_run_id, 
         created_at, 
         started_at,
@@ -155,6 +157,7 @@ export async function GET(
         timestamp: test.started_at,
         status: test.status,
         duration: test.duration,
+        attempts: test.attempts || 1,
         branch: test.test_runs?.branch,
         testRunId: test.test_runs?.id,
         environment: test.test_runs?.environments?.name || null,
@@ -167,8 +170,12 @@ export async function GET(
     const passed = tests?.filter((t) => t.status === "passed").length || 0;
     const failed = tests?.filter((t) => t.status === "failed").length || 0;
     const flaky = tests?.filter((t) => t.status === "flaky").length || 0;
-    const totalDuration =
-      tests?.reduce((sum, t) => sum + (t.duration || 0), 0) || 0;
+    
+    // Calculate average duration per attempt (not total duration)
+    const totalDuration = tests?.reduce((sum, t) => {
+      const attempts = t.attempts || 1;
+      return sum + (t.duration || 0) / attempts;
+    }, 0) || 0;
 
     const summary = {
       totalRuns,

@@ -66,7 +66,10 @@ export default function TestsPage() {
     "/api/environments",
     configFetcher,
   );
-  const { data: triggersData } = useSWRImmutable("/api/triggers", configFetcher);
+  const { data: triggersData } = useSWRImmutable(
+    "/api/triggers",
+    configFetcher,
+  );
 
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
@@ -259,7 +262,7 @@ export default function TestsPage() {
               {filteredTests.length !== 1 ? "s" : ""}
             </div>
 
-            <div className="space-y-2 flex flex-col">
+            <div className="space-y-4 flex flex-col">
               {filteredTests.map((test, idx) => {
                 return (
                   <Link

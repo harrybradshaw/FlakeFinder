@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
+import { groupRunsByDay } from "@/lib/trends-utils";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,25 +11,16 @@ export async function GET(request: NextRequest) {
     const trigger = searchParams.get("trigger");
     const suite = searchParams.get("suite");
     const timeRange = searchParams.get("timeRange") || "7d";
+    const groupBy = searchParams.get("groupBy") || "daily"; // 'daily' or 'individual'
 
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-      return NextResponse.json({
-        totalTests: 0,
-        passed: 0,
-        failed: 0,
-        flaky: 0,
-      });
+      return NextResponse.json({ trends: [] });
     }
 
     const { userId } = await auth();
 
     if (!userId) {
-      return NextResponse.json({
-        totalTests: 0,
-        passed: 0,
-        failed: 0,
-        flaky: 0,
-      });
+      return NextResponse.json({ trends: [] });
     }
 
     const { createClient } = await import("@supabase/supabase-js");
@@ -46,12 +38,7 @@ export async function GET(request: NextRequest) {
     const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
 
     if (userOrgIds.length === 0) {
-      return NextResponse.json({
-        totalTests: 0,
-        passed: 0,
-        failed: 0,
-        flaky: 0,
-      });
+      return NextResponse.json({ trends: [] });
     }
 
     // Get accessible projects
@@ -63,12 +50,7 @@ export async function GET(request: NextRequest) {
     const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || [];
 
     if (accessibleProjectIds.length === 0) {
-      return NextResponse.json({
-        totalTests: 0,
-        passed: 0,
-        failed: 0,
-        flaky: 0,
-      });
+      return NextResponse.json({ trends: [] });
     }
 
     // Calculate time range
@@ -140,18 +122,14 @@ export async function GET(request: NextRequest) {
     // Build query
     let query = supabase
       .from("test_runs")
-      .select("total, passed, failed, flaky")
+      .select("id, timestamp, total, passed, failed, flaky, wall_clock_duration")
       .in("project_id", accessibleProjectIds)
-      .gte("timestamp", startDate.toISOString());
+      .gte("timestamp", startDate.toISOString())
+      .order("timestamp", { ascending: true });
 
     if (projectId) {
       if (!accessibleProjectIds.includes(projectId)) {
-        return NextResponse.json({
-          totalTests: 0,
-          passed: 0,
-          failed: 0,
-          flaky: 0,
-        });
+        return NextResponse.json({ trends: [] });
       }
       query = query.eq("project_id", projectId);
     }
@@ -172,12 +150,7 @@ export async function GET(request: NextRequest) {
       const suiteTestIdList = suiteTestIds?.map((st) => st.id) || [];
 
       if (suiteTestIdList.length === 0) {
-        return NextResponse.json({
-          totalTests: 0,
-          passed: 0,
-          failed: 0,
-          flaky: 0,
-        });
+        return NextResponse.json({ trends: [] });
       }
 
       const { data: testsInSuite } = await supabase
@@ -190,12 +163,7 @@ export async function GET(request: NextRequest) {
       ];
 
       if (testRunIdsInSuite.length === 0) {
-        return NextResponse.json({
-          totalTests: 0,
-          passed: 0,
-          failed: 0,
-          flaky: 0,
-        });
+        return NextResponse.json({ trends: [] });
       }
 
       query = query.in("id", testRunIdsInSuite);
@@ -204,28 +172,31 @@ export async function GET(request: NextRequest) {
     // Execute query
     const { data: runs } = await query;
 
-    // Aggregate stats
-    const stats = (runs || []).reduce(
-      (acc, run) => ({
-        totalTests: acc.totalTests + run.total,
-        passed: acc.passed + run.passed,
-        failed: acc.failed + run.failed,
-        flaky: acc.flaky + run.flaky,
-      }),
-      { totalTests: 0, passed: 0, failed: 0, flaky: 0 },
-    );
+    if (!runs || runs.length === 0) {
+      return NextResponse.json({ trends: [] });
+    }
 
-    return NextResponse.json(stats);
+    // Process data based on groupBy parameter
+    let trends;
+
+    if (groupBy === "daily") {
+      // Use utility function for grouping and aggregation
+      trends = groupRunsByDay(runs);
+    } else {
+      // Return individual runs
+      trends = runs.map((run) => ({
+        date: run.timestamp,
+        timestamp: run.timestamp,
+        passed: run.passed,
+        failed: run.failed,
+        flaky: run.flaky,
+        total: run.total,
+      }));
+    }
+
+    return NextResponse.json({ trends });
   } catch (error) {
-    console.error("[API] Error fetching stats:", error);
-    return NextResponse.json(
-      {
-        totalTests: 0,
-        passed: 0,
-        failed: 0,
-        flaky: 0,
-      },
-      { status: 500 },
-    );
+    console.error("[API] Error fetching trends:", error);
+    return NextResponse.json({ trends: [] }, { status: 500 });
   }
 }

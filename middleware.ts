@@ -9,16 +9,14 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 // CI/CD routes that use API key auth instead of Clerk auth
-const isCIRoute = createRouteMatcher([
-  "/api/ci-upload",
-]);
+const isCIRoute = createRouteMatcher(["/api/ci-upload"]);
 
 export default clerkMiddleware(async (auth, req) => {
   // Skip Clerk auth for CI routes (they use API key auth)
   if (isCIRoute(req)) {
     return;
   }
-  
+
   // Protect other API routes - require authentication
   if (isProtectedRoute(req)) {
     await auth.protect();

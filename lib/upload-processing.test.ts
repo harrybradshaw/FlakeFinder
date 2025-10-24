@@ -43,7 +43,9 @@ describe("upload-processing", () => {
 
       expect(result.screenshotCount).toBe(1);
       // Should use base64 encoding
-      expect(result.screenshotUrls["data/test.png"]).toMatch(/^data:image\/png;base64,/);
+      expect(result.screenshotUrls["data/test.png"]).toMatch(
+        /^data:image\/png;base64,/,
+      );
     });
 
     it("should handle empty ZIP (no screenshots)", async () => {
@@ -63,7 +65,9 @@ describe("upload-processing", () => {
 
       const result = await processScreenshots(zip);
 
-      expect(result.screenshotUrls["data/test.jpg"]).toMatch(/^data:image\/jpeg;base64,/);
+      expect(result.screenshotUrls["data/test.jpg"]).toMatch(
+        /^data:image\/jpeg;base64,/,
+      );
     });
   });
 
@@ -73,7 +77,7 @@ describe("upload-processing", () => {
     beforeEach(async () => {
       // Create a realistic Playwright report structure
       mockZip = new JSZip();
-      
+
       const reportData = {
         config: {
           rootDir: "/test",
@@ -458,7 +462,12 @@ describe("upload-processing", () => {
                 });
                 return { order: orderMock };
               });
-              return { eq: eqMock2, order: vi.fn(() => ({ limit: vi.fn(() => ({ data: [], error: null })) })) };
+              return {
+                eq: eqMock2,
+                order: vi.fn(() => ({
+                  limit: vi.fn(() => ({ data: [], error: null })),
+                })),
+              };
             });
             return { eq: eqMock1 };
           });
@@ -496,7 +505,12 @@ describe("upload-processing", () => {
                 });
                 return { order: orderMock };
               });
-              return { eq: eqMock2, order: vi.fn(() => ({ limit: vi.fn(() => ({ data: [existingRun], error: null })) })) };
+              return {
+                eq: eqMock2,
+                order: vi.fn(() => ({
+                  limit: vi.fn(() => ({ data: [existingRun], error: null })),
+                })),
+              };
             });
             return { eq: eqMock1 };
           });
@@ -605,7 +619,9 @@ describe("upload-processing", () => {
             return {
               upsert: vi.fn(() => ({
                 select: vi.fn(() => ({
-                  data: [{ id: "st-1", file: "test.spec.ts", name: "should pass" }],
+                  data: [
+                    { id: "st-1", file: "test.spec.ts", name: "should pass" },
+                  ],
                   error: null,
                 })),
               })),
@@ -710,7 +726,9 @@ describe("upload-processing", () => {
             return {
               upsert: vi.fn(() => ({
                 select: vi.fn(() => ({
-                  data: [{ id: "st-1", file: "test.spec.ts", name: "should pass" }],
+                  data: [
+                    { id: "st-1", file: "test.spec.ts", name: "should pass" },
+                  ],
                   error: null,
                 })),
               })),

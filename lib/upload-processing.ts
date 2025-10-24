@@ -14,8 +14,10 @@ import {
   calculateTestStats,
   formatDuration,
   type ExtractedTest,
+  type EnvironmentData,
 } from "@/lib/zip-extraction-utils";
 import { calculateContentHash } from "@/lib/playwright-report-utils";
+import { calculateWallClockDuration } from "./wall-clock-duration";
 
 export interface ScreenshotUploadResult {
   screenshotUrls: Record<string, string>;
@@ -39,6 +41,7 @@ export interface ProcessedUpload {
   environment: string;
   timestamp: string;
   ciMetadata: Record<string, unknown> | null;
+  environmentData: EnvironmentData | null;
   totalDuration: number;
   durationFormatted: string;
 }
@@ -166,24 +169,30 @@ export async function processTestSteps(
   }
 
   // Helper function to recursively find the last failed step
-  function findLastFailedStep(steps: unknown[]): StepsUploadResult["lastFailedStep"] {
+  function findLastFailedStep(
+    steps: unknown[],
+  ): StepsUploadResult["lastFailedStep"] {
     for (let i = steps.length - 1; i >= 0; i--) {
       const step = steps[i] as Record<string, unknown>;
-      
+
       // Check nested steps first (depth-first search from end)
       if (step.steps && Array.isArray(step.steps)) {
         const nestedFailed = findLastFailedStep(step.steps);
         if (nestedFailed) return nestedFailed;
       }
-      
+
       // Check if this step has an error
       if (step.error) {
         return {
           title: String(step.title || "Unknown step"),
           duration: Number(step.duration || 0),
-          error: typeof step.error === 'string' 
-            ? step.error 
-            : String((step.error as Record<string, unknown>)?.message || step.error),
+          error:
+            typeof step.error === "string"
+              ? step.error
+              : String(
+                  (step.error as Record<string, unknown>)?.message ||
+                    step.error,
+                ),
         };
       }
     }
@@ -212,10 +221,10 @@ export async function processTestSteps(
 
       // Generate unique path
       const stepsPath = `${testRunId}/${testId}-${retryIndex}.json`;
-      
+
       // Convert steps to JSON buffer
       const stepsJson = JSON.stringify(steps, null, 2);
-      const stepsBuffer = Buffer.from(stepsJson, 'utf-8');
+      const stepsBuffer = Buffer.from(stepsJson, "utf-8");
 
       // Upload to storage
       const { error: uploadError } = await supabaseAdmin.storage
@@ -232,7 +241,7 @@ export async function processTestSteps(
       }
 
       console.log(`${logPrefix} Uploaded steps to storage:`, stepsPath);
-      
+
       return {
         stepsUrl: stepsPath,
         lastFailedStep,
@@ -243,7 +252,9 @@ export async function processTestSteps(
     }
   }
 
-  console.log(`${logPrefix} Supabase Storage not configured, skipping steps upload`);
+  console.log(
+    `${logPrefix} Supabase Storage not configured, skipping steps upload`,
+  );
   return { stepsUrl: null, lastFailedStep };
 }
 
@@ -258,10 +269,14 @@ export async function processTestsFromZip(
   logPrefix: string = "[Upload]",
 ): Promise<ProcessedUpload> {
   // Extract tests using utility function
-  const { tests, ciMetadata, testExecutionTime } =
+  const { tests, ciMetadata, testExecutionTime, environmentData } =
     await extractTestsFromZip(zip);
 
   console.log(`${logPrefix} Extracted tests:`, tests.length);
+
+  if (environmentData) {
+    console.log(`${logPrefix} Found environment data:`, environmentData);
+  }
 
   let branch = initialBranch;
   let environment = initialEnvironment;
@@ -316,6 +331,7 @@ export async function processTestsFromZip(
     environment,
     timestamp: testExecutionTime || new Date().toISOString(),
     ciMetadata: (ciMetadata as Record<string, unknown>) || null,
+    environmentData: environmentData || null,
     totalDuration,
     durationFormatted,
   };
@@ -618,6 +634,19 @@ export async function insertTestRun(params: {
   } = params;
 
   try {
+    // Calculate wall-clock duration from test timings
+    const wallClockDuration = calculateWallClockDuration(
+      processedData.tests.map((t) => ({
+        started_at: t.started_at || new Date().toISOString(),
+        duration: t.duration,
+      }))
+    );
+
+    console.log(`${logPrefix} Calculated durations:`, {
+      totalDuration: processedData.totalDuration,
+      wallClockDuration,
+    });
+
     // Insert test run
     const { data: runData, error: runError } = await supabase
       .from("test_runs")
@@ -633,8 +662,10 @@ export async function insertTestRun(params: {
         flaky: processedData.stats.flaky,
         skipped: processedData.stats.skipped,
         duration: processedData.totalDuration,
+        wall_clock_duration: wallClockDuration,
         timestamp: processedData.timestamp,
         ci_metadata: processedData.ciMetadata as any, // Type cast for JSON field
+        environment_data: processedData.environmentData as any, // Type cast for JSON field
         content_hash: processedData.contentHash,
         uploaded_filename: filename,
       })
@@ -747,8 +778,8 @@ export async function insertTestRun(params: {
             screenshots: attempt.screenshots,
             attachments: attempt.attachments || [],
             started_at: attempt.startTime,
-            steps_url: stepsUrl,  // Store URL instead of full steps
-            last_failed_step: lastFailedStep,  // Store summary
+            steps_url: stepsUrl, // Store URL instead of full steps
+            last_failed_step: lastFailedStep, // Store summary
           });
         }
       }

@@ -71,7 +71,10 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
     .order("retry_index", { ascending: true });
 
   if (attemptsError) {
-    console.error("[getTestRunById] Error fetching test attempts:", attemptsError);
+    console.error(
+      "[getTestRunById] Error fetching test attempts:",
+      attemptsError,
+    );
   }
 
   // Group test attempts by test_id
@@ -89,10 +92,9 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
   return {
     id: testRun.id,
     timestamp: testRun.timestamp,
-    project: (testRun).project?.name || "default",
-    project_display:
-      (testRun).project?.display_name || "Default Project",
-    project_color: (testRun).project?.color || "#3b82f6",
+    project: testRun.project?.name || "default",
+    project_display: testRun.project?.display_name || "Default Project",
+    project_color: testRun.project?.color || "#3b82f6",
     environment: (testRun as any).environment?.name || "unknown",
     environment_display:
       (testRun as any).environment?.display_name || "Unknown",
@@ -107,8 +109,19 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
     failed: testRun.failed,
     flaky: testRun.flaky,
     skipped: testRun.skipped,
-    duration: formatDuration(testRun.duration),
-    ci_metadata: (typeof testRun.ci_metadata === 'object' && testRun.ci_metadata !== null && !Array.isArray(testRun.ci_metadata)) ? (testRun.ci_metadata as Record<string, any>) : {},
+    duration: formatDuration(testRun.wall_clock_duration || testRun.duration),
+    ci_metadata:
+      typeof testRun.ci_metadata === "object" &&
+      testRun.ci_metadata !== null &&
+      !Array.isArray(testRun.ci_metadata)
+        ? (testRun.ci_metadata as Record<string, any>)
+        : {},
+    environment_data:
+      typeof testRun.environment_data === "object" &&
+      testRun.environment_data !== null &&
+      !Array.isArray(testRun.environment_data)
+        ? (testRun.environment_data as Record<string, any>)
+        : undefined,
     tests: tests.map((test) => ({
       id: test.id,
       suite_test_id: test.suite_test_id ?? undefined,
@@ -124,17 +137,28 @@ export async function getTestRunById(id: string): Promise<TestRun | null> {
       worker_index: test.worker_index ?? undefined,
       started_at: test.started_at ?? undefined,
       error: test.error ?? undefined,
-      screenshots: Array.isArray(test.screenshots) ? (test.screenshots as string[]) : [],
-      metadata: (typeof test.metadata === 'object' && test.metadata !== null && !Array.isArray(test.metadata)) ? test.metadata : undefined,
+      screenshots: Array.isArray(test.screenshots)
+        ? (test.screenshots as string[])
+        : [],
+      metadata:
+        typeof test.metadata === "object" &&
+        test.metadata !== null &&
+        !Array.isArray(test.metadata)
+          ? test.metadata
+          : undefined,
       attempts: (attemptsByTestId.get(test.id) || []).map((attempt: any) => ({
         attemptIndex: attempt.retry_index,
-        testResultId: attempt.id,  // For lazy loading steps
+        testResultId: attempt.id, // For lazy loading steps
         status: attempt.status,
         duration: attempt.duration,
         error: attempt.error,
         errorStack: attempt.error_stack,
-        screenshots: Array.isArray(attempt.screenshots) ? attempt.screenshots : [],
-        attachments: Array.isArray(attempt.attachments) ? attempt.attachments : [],
+        screenshots: Array.isArray(attempt.screenshots)
+          ? attempt.screenshots
+          : [],
+        attachments: Array.isArray(attempt.attachments)
+          ? attempt.attachments
+          : [],
         startTime: attempt.started_at,
         stepsUrl: attempt.steps_url ?? undefined,
         lastFailedStep: attempt.last_failed_step ?? undefined,
@@ -289,8 +313,19 @@ export async function getTestRun(
     failed: testRun.failed,
     flaky: testRun.flaky,
     skipped: testRun.skipped,
-    duration: formatDuration(testRun.duration),
-    ci_metadata: (typeof testRun.ci_metadata === 'object' && testRun.ci_metadata !== null && !Array.isArray(testRun.ci_metadata)) ? (testRun.ci_metadata as Record<string, any>) : {},
+    duration: formatDuration(testRun.wall_clock_duration || testRun.duration),
+    ci_metadata:
+      typeof testRun.ci_metadata === "object" &&
+      testRun.ci_metadata !== null &&
+      !Array.isArray(testRun.ci_metadata)
+        ? (testRun.ci_metadata as Record<string, any>)
+        : {},
+    environment_data:
+      typeof testRun.environment_data === "object" &&
+      testRun.environment_data !== null &&
+      !Array.isArray(testRun.environment_data)
+        ? (testRun.environment_data as Record<string, any>)
+        : undefined,
     tests: tests.map((test) => ({
       id: test.id,
       suite_test_id: test.suite_test_id ?? undefined,
@@ -306,17 +341,28 @@ export async function getTestRun(
       worker_index: test.worker_index ?? undefined,
       started_at: test.started_at ?? undefined,
       error: test.error ?? undefined,
-      screenshots: Array.isArray(test.screenshots) ? (test.screenshots as string[]) : [],
-      metadata: (typeof test.metadata === 'object' && test.metadata !== null && !Array.isArray(test.metadata)) ? test.metadata : undefined,
+      screenshots: Array.isArray(test.screenshots)
+        ? (test.screenshots as string[])
+        : [],
+      metadata:
+        typeof test.metadata === "object" &&
+        test.metadata !== null &&
+        !Array.isArray(test.metadata)
+          ? test.metadata
+          : undefined,
       attempts: (attemptsByTestId.get(test.id) || []).map((attempt: any) => ({
         attemptIndex: attempt.retry_index,
-        testResultId: attempt.id,  // For lazy loading steps
+        testResultId: attempt.id, // For lazy loading steps
         status: attempt.status,
         duration: attempt.duration,
         error: attempt.error,
         errorStack: attempt.error_stack,
-        screenshots: Array.isArray(attempt.screenshots) ? attempt.screenshots : [],
-        attachments: Array.isArray(attempt.attachments) ? attempt.attachments : [],
+        screenshots: Array.isArray(attempt.screenshots)
+          ? attempt.screenshots
+          : [],
+        attachments: Array.isArray(attempt.attachments)
+          ? attempt.attachments
+          : [],
         startTime: attempt.started_at,
         stepsUrl: attempt.steps_url ?? undefined,
         lastFailedStep: attempt.last_failed_step ?? undefined,

@@ -32,10 +32,7 @@ export async function GET(
 
     if (testError || !test) {
       console.error("[API] Error fetching test:", testError);
-      return NextResponse.json(
-        { error: "Test not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "Test not found" }, { status: 404 });
     }
 
     // Fetch test attempts (including retries) for this test
@@ -46,15 +43,21 @@ export async function GET(
       .order("retry_index", { ascending: true });
 
     if (attemptsError) {
-      console.error("[getTestDetails] Error fetching test attempts:", attemptsError);
+      console.error(
+        "[getTestDetails] Error fetching test attempts:",
+        attemptsError,
+      );
     }
-    
+
     // Debug logging
-    console.log('[API] Test attempts:', testAttempts?.map(a => ({ 
-      id: a.id, 
-      steps_url: a.steps_url,
-      hasSteps: !!a.steps_url 
-    })));
+    console.log(
+      "[API] Test attempts:",
+      testAttempts?.map((a) => ({
+        id: a.id,
+        steps_url: a.steps_url,
+        hasSteps: !!a.steps_url,
+      })),
+    );
 
     const response: TestDetailsResponse = {
       test: {
@@ -62,10 +65,17 @@ export async function GET(
         suite_test_id: test.suite_test_id ?? undefined,
         name: test.suite_test?.name || "Unknown Test",
         file: test.suite_test?.file || "unknown",
-        status: test.status as "passed" | "failed" | "flaky" | "skipped" | "timedOut",
+        status: test.status as
+          | "passed"
+          | "failed"
+          | "flaky"
+          | "skipped"
+          | "timedOut",
         duration: test.duration,
         error: test.error ?? undefined,
-        screenshots: Array.isArray(test.screenshots) ? (test.screenshots as string[]) : [],
+        screenshots: Array.isArray(test.screenshots)
+          ? (test.screenshots as string[])
+          : [],
         started_at: test.started_at ?? undefined,
         attempts: (testAttempts || []).map((attempt) => ({
           attemptIndex: attempt.retry_index,
@@ -78,23 +88,32 @@ export async function GET(
           error: attempt.error ?? undefined,
           error_stack: attempt.error_stack ?? undefined,
           errorStack: attempt.error_stack ?? undefined,
-          screenshots: Array.isArray(attempt.screenshots) ? (attempt.screenshots as string[]) : [],
-          attachments: Array.isArray(attempt.attachments) ? (attempt.attachments as Array<{
-            name: string;
-            contentType: string;
-            content: string;
-          }>) : [],
+          screenshots: Array.isArray(attempt.screenshots)
+            ? (attempt.screenshots as string[])
+            : [],
+          attachments: Array.isArray(attempt.attachments)
+            ? (attempt.attachments as Array<{
+                name: string;
+                contentType: string;
+                content: string;
+              }>)
+            : [],
           started_at: attempt.started_at ?? undefined,
           startTime: attempt.started_at ?? undefined,
           stepsUrl: attempt.steps_url ?? undefined,
           hasSteps: !!attempt.steps_url, // Hint: steps are available if stepsUrl exists
-          lastFailedStep: attempt.last_failed_step ? (attempt.last_failed_step as unknown as { title: string; duration: number; error: string }) : undefined,
+          lastFailedStep: attempt.last_failed_step
+            ? (attempt.last_failed_step as unknown as {
+                title: string;
+                duration: number;
+                error: string;
+              })
+            : undefined,
         })),
       },
     };
 
     return NextResponse.json(response);
-
   } catch (error) {
     console.error("[API] Error in test details endpoint:", error);
     return NextResponse.json(

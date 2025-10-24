@@ -79,7 +79,13 @@ export function TestCaseDetails({ testCase }: TestCaseDetailsProps) {
         const hasStepsToLoad = attempt.stepsUrl || attempt.testResultId;
 
         // Skip attempts with no content
-        if (!hasAttachments && !hasError && !hasScreenshots && !hasSteps && !hasStepsToLoad) {
+        if (
+          !hasAttachments &&
+          !hasError &&
+          !hasScreenshots &&
+          !hasSteps &&
+          !hasStepsToLoad
+        ) {
           return null;
         }
 
@@ -155,7 +161,9 @@ export function TestCaseDetails({ testCase }: TestCaseDetailsProps) {
 
             {/* Error and Screenshots Section */}
             {(hasError || hasScreenshots) && (
-              <div className={`${hasAttachments || hasSteps || hasStepsToLoad ? "mt-4" : ""} grid grid-cols-1 lg:grid-cols-2 gap-4`}>
+              <div
+                className={`${hasAttachments || hasSteps || hasStepsToLoad ? "mt-4" : ""} grid grid-cols-1 lg:grid-cols-2 gap-4`}
+              >
                 {/* Error Details */}
                 {hasError && (
                   <div>
@@ -166,16 +174,18 @@ export function TestCaseDetails({ testCase }: TestCaseDetailsProps) {
                       {(() => {
                         const errorText = stripAnsi(attempt.error || "");
                         const stackText = stripAnsi(attempt.errorStack || "");
-                        
+
                         // Check if error looks like a stack trace (has "at " lines)
-                        const errorIsStack = errorText.includes("\n    at ") || errorText.includes("\n  at ");
+                        const errorIsStack =
+                          errorText.includes("\n    at ") ||
+                          errorText.includes("\n  at ");
                         const hasStack = stackText && stackText !== errorText;
-                        
+
                         // Extract just the first line as the message if error contains stack
-                        const errorMessage = errorIsStack 
-                          ? errorText.split("\n")[0] 
+                        const errorMessage = errorIsStack
+                          ? errorText.split("\n")[0]
                           : errorText;
-                        
+
                         return (
                           <>
                             {errorMessage && (

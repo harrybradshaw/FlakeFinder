@@ -257,7 +257,7 @@ describe("test-aggregation-utils", () => {
         "failed", // 2025-10-20
         "passed", // 2025-10-19
         "passed", // 2025-10-18
-        "flaky",  // 2025-10-17
+        "flaky", // 2025-10-17
       ]);
     });
 
@@ -296,8 +296,16 @@ describe("test-aggregation-utils", () => {
       // Should only return the 10 most recent
       expect(result.recentStatuses).toHaveLength(10);
       expect(result.recentStatuses).toEqual([
-        "passed", "passed", "passed", "passed", "passed",
-        "passed", "passed", "passed", "passed", "passed",
+        "passed",
+        "passed",
+        "passed",
+        "passed",
+        "passed",
+        "passed",
+        "passed",
+        "passed",
+        "passed",
+        "passed",
       ]);
       // Should NOT include the older "failed" statuses
       expect(result.recentStatuses).not.toContain("failed");
@@ -477,7 +485,9 @@ describe("test-aggregation-utils", () => {
     });
 
     it("should return the only status for single-item array", () => {
-      const statuses = [{ status: "flaky", started_at: "2025-10-20T10:00:00Z" }];
+      const statuses = [
+        { status: "flaky", started_at: "2025-10-20T10:00:00Z" },
+      ];
 
       const result = getMostRecentStatus(statuses);
       expect(result).toBe("flaky");
@@ -814,7 +824,9 @@ describe("test-aggregation-utils", () => {
       expect(metrics.size).toBe(2);
 
       // Transform
-      const transformed = Array.from(metrics.values()).map(transformTestMetrics);
+      const transformed = Array.from(metrics.values()).map(
+        transformTestMetrics,
+      );
       expect(transformed).toHaveLength(2);
 
       // Sort

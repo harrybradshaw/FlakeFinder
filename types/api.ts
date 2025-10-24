@@ -8,10 +8,13 @@ export interface TestStep {
   category?: string; // e.g., "hook", "expect", "pw:api", "test.step"
   startTime?: string;
   duration: number;
-  error?: string | { // Can be string or object
-    message: string;
-    stack?: string;
-  };
+  error?:
+    | string
+    | {
+        // Can be string or object
+        message: string;
+        stack?: string;
+      };
   location?: {
     file: string;
     line: number;
@@ -137,6 +140,7 @@ export interface TestHistoryItem {
   timestamp: string;
   status: string;
   duration: number;
+  attempts?: number;
   environment?: string;
   trigger?: string;
   branch?: string;

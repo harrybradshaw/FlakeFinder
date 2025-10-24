@@ -5,6 +5,7 @@ This directory contains comprehensive test coverage for the test viewer applicat
 ## API Route Tests
 
 ### app/api/test-runs/[id]/tests/[testId]/route.test.ts (4 tests)
+
 - ✅ **CRITICAL: `retry_index` → `attemptIndex` mapping** (prevents "Attempt NaN" bug)
 - ✅ Returns test details with all attempt fields properly mapped
 - ✅ Handles 404 when test is not found
@@ -22,6 +23,7 @@ This directory contains comprehensive test coverage for the test viewer applicat
 ## Test Coverage
 
 ### test-runs.test.ts (NEW)
+
 - ✅ Fetching test runs from database
 - ✅ Transforming database fields to frontend format
 - ✅ **Critical: `retry_index` → `attemptIndex` mapping** (fixes "Attempt NaN" bug)
@@ -35,6 +37,7 @@ This directory contains comprehensive test coverage for the test viewer applicat
 - ✅ Environment variable validation
 
 ### zip-extraction-utils.test.ts (51 tests)
+
 - ✅ Extracting tests from ZIP files
 - ✅ Parsing test metadata, CI data, execution time
 - ✅ Handling flaky tests with retry attempts
@@ -49,9 +52,11 @@ This directory contains comprehensive test coverage for the test viewer applicat
 - ✅ **Robust assertions with specific expected values** (no conditional tests)
 
 ### playwright-report-utils.test.ts
+
 The test suite covers:
 
 ### Core Functionality
+
 - ✅ Processing valid Playwright HTML reports
 - ✅ Extracting test metadata (id, name, status, duration, file)
 - ✅ Handling different test statuses (passed, failed, flaky, skipped, timedOut)
@@ -64,31 +69,37 @@ The test suite covers:
 - ✅ Handling retry results with attachments
 
 ### Error Handling
+
 - ✅ Throwing `ReportProcessingError` for invalid files
 - ✅ Handling empty test reports gracefully
 
 ### Data Validation
+
 - ✅ Validating test result structure consistency
 - ✅ Type checking for all fields
 
 ## Running Tests
 
 ### Run all tests
+
 ```bash
 pnpm test
 ```
 
 ### Run tests once (CI mode)
+
 ```bash
 pnpm test:run
 ```
 
 ### Run tests with UI
+
 ```bash
 pnpm test:ui
 ```
 
 ### Run tests with coverage
+
 ```bash
 pnpm test:coverage
 ```
@@ -96,6 +107,7 @@ pnpm test:coverage
 ## Test Data
 
 The tests use a real Playwright report file located at:
+
 ```
 /Users/harbra/Downloads/playwright-report-testing-466.zip
 ```
@@ -105,16 +117,16 @@ This ensures that the tests validate against actual Playwright report format.
 ## Test Structure
 
 ```typescript
-describe('playwright-report-utils', () => {
-  describe('processPlaywrightReportFile', () => {
+describe("playwright-report-utils", () => {
+  describe("processPlaywrightReportFile", () => {
     // Main functionality tests
   });
-  
-  describe('Test result structure validation', () => {
+
+  describe("Test result structure validation", () => {
     // Data structure validation tests
   });
-  
-  describe('ReportProcessingError', () => {
+
+  describe("ReportProcessingError", () => {
     // Error class tests
   });
 });
@@ -133,16 +145,16 @@ When adding new tests:
 ## Example Test
 
 ```typescript
-it('should extract test metadata correctly', async () => {
+it("should extract test metadata correctly", async () => {
   const result = await processPlaywrightReportFile(testReportFile);
   const firstTest = result.tests[0];
 
-  expect(firstTest).toHaveProperty('id');
-  expect(firstTest).toHaveProperty('name');
-  expect(firstTest).toHaveProperty('status');
-  expect(firstTest).toHaveProperty('duration');
-  expect(firstTest).toHaveProperty('file');
-  expect(firstTest).toHaveProperty('screenshots');
+  expect(firstTest).toHaveProperty("id");
+  expect(firstTest).toHaveProperty("name");
+  expect(firstTest).toHaveProperty("status");
+  expect(firstTest).toHaveProperty("duration");
+  expect(firstTest).toHaveProperty("file");
+  expect(firstTest).toHaveProperty("screenshots");
 });
 ```
 
@@ -162,19 +174,25 @@ These tests can be integrated into your CI/CD pipeline:
 ## Troubleshooting
 
 ### Tests fail with "file not found"
+
 Ensure the test report file exists at the expected path:
+
 ```bash
 ls -lh /Users/harbra/Downloads/playwright-report-testing-466.zip
 ```
 
 ### Import errors
+
 Make sure all dependencies are installed:
+
 ```bash
 pnpm install
 ```
 
 ### TypeScript errors
+
 Ensure TypeScript is properly configured and all types are available:
+
 ```bash
 npx tsc --noEmit
 ```

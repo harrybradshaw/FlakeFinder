@@ -298,7 +298,7 @@ export async function GET(request: NextRequest) {
       failed: run.failed,
       flaky: run.flaky,
       skipped: run.skipped,
-      duration: formatDuration(run.duration),
+      duration: formatDuration(run.wall_clock_duration || run.duration),
       uploaded_filename: run.uploaded_filename,
     }));
 

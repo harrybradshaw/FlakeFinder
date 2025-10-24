@@ -7,6 +7,7 @@ Suites provide a way to logically group tests within a project. This allows for 
 ## Database Schema
 
 ### `suites` Table
+
 ```sql
 CREATE TABLE public.suites (
     id UUID PRIMARY KEY,
@@ -20,6 +21,7 @@ CREATE TABLE public.suites (
 ```
 
 **Key Fields**:
+
 - `id` - Unique identifier for the suite
 - `project_id` - Which project this suite belongs to
 - `name` - Suite name (e.g., "Smoke Tests", "E2E Tests", "API Tests")
@@ -27,8 +29,9 @@ CREATE TABLE public.suites (
 - **Unique Constraint**: `(project_id, name)` - One suite name per project
 
 ### Updated `suite_tests` Table
+
 ```sql
-ALTER TABLE suite_tests 
+ALTER TABLE suite_tests
 ADD COLUMN suite_id UUID REFERENCES suites(id) NOT NULL;
 ```
 
@@ -47,6 +50,7 @@ Organization
 Every project automatically gets a **"Default Suite"** that contains all tests unless explicitly assigned to another suite.
 
 ### Migration Behavior
+
 - Creates "Default Suite" for each existing project
 - Assigns all existing `suite_tests` to the default suite
 - Future uploads will use the default suite unless specified otherwise
@@ -54,6 +58,7 @@ Every project automatically gets a **"Default Suite"** that contains all tests u
 ## Use Cases
 
 ### 1. **Test Organization**
+
 ```
 Project: "E-Commerce App"
 ├── Suite: "Smoke Tests" (quick, critical path tests)
@@ -63,11 +68,13 @@ Project: "E-Commerce App"
 ```
 
 ### 2. **Selective Test Runs**
+
 - Run only smoke tests on every PR
 - Run full E2E suite nightly
 - Run performance tests weekly
 
 ### 3. **Test Health Dashboard Filtering**
+
 - View flakiness by suite
 - Compare suite performance over time
 - Identify problematic test categories
@@ -75,6 +82,7 @@ Project: "E-Commerce App"
 ## API Integration
 
 ### Upload Flow
+
 1. **Upload test results** → `/api/upload-zip`
 2. **Get/Create default suite** for the project
 3. **Upsert suite_tests** with `suite_id` reference
@@ -83,16 +91,18 @@ Project: "E-Commerce App"
 ### Future Enhancements
 
 #### Suite Detection from File Path
+
 ```typescript
 // Auto-assign suite based on file path
-if (test.file.includes('/smoke/')) {
+if (test.file.includes("/smoke/")) {
   suiteId = smokeSuiteId;
-} else if (test.file.includes('/e2e/')) {
+} else if (test.file.includes("/e2e/")) {
   suiteId = e2eSuiteId;
 }
 ```
 
 #### Suite Metadata in Upload
+
 ```typescript
 // Allow specifying suite in upload form
 const formData = {
@@ -104,6 +114,7 @@ const formData = {
 ```
 
 #### Suite-based Filtering
+
 ```typescript
 // Filter test runs by suite
 GET /api/test-runs?suite=smoke-tests
@@ -123,20 +134,23 @@ GET /api/suites/{suiteId}/health
 ## Example Queries
 
 ### Get all suites for a project
+
 ```sql
 SELECT * FROM suites WHERE project_id = 'abc-123';
 ```
 
 ### Get all tests in a suite
+
 ```sql
-SELECT st.* 
+SELECT st.*
 FROM suite_tests st
 WHERE st.suite_id = 'suite-123';
 ```
 
 ### Get test execution stats by suite
+
 ```sql
-SELECT 
+SELECT
   s.name as suite_name,
   COUNT(DISTINCT st.id) as total_tests,
   COUNT(t.id) as total_executions,

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
 interface FailurePattern {
   stepTitle: string;
@@ -14,7 +15,7 @@ interface FailurePattern {
     timestamp: string;
     screenshot?: string;
   }>;
-  failureRate: number; // percentage of times this step fails when encountered
+  failureRate: number;
   avgDuration: number;
   latestScreenshot?: string;
 }
@@ -39,15 +40,14 @@ function normalizeError(error: string | { message?: string }): string {
   // For Playwright errors, try to extract the full context including locator and call log
   // This preserves valuable debugging information
   const lines = errorText.split("\n");
-  
+
   // Check if this looks like a Playwright error with structured information
   const hasLocator = errorText.includes("Locator:");
   const hasExpected = errorText.includes("Expected:");
-  const hasReceived = errorText.includes("Received:");
   const hasCallLog = errorText.includes("Call log:");
-  
+
   let message: string;
-  
+
   if (hasLocator || hasExpected || hasCallLog) {
     // Keep the full structured error but normalize dynamic values
     // Take lines until we hit a stack trace (lines starting with "at ")
@@ -67,7 +67,10 @@ function normalizeError(error: string | { message?: string }): string {
   // Normalize dynamic values while preserving the structure
   message = message
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/g, "[TIMESTAMP]")
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[UUID]")
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+      "[UUID]",
+    )
     .replace(/\b\d{13,}\b/g, "[TIMESTAMP]")
     .replace(/with timeout \d+ms/g, "with timeout [DURATION]ms")
     .replace(/timeout of \d+ms/gi, "timeout of [DURATION]ms")
@@ -79,10 +82,22 @@ function normalizeError(error: string | { message?: string }): string {
     .replace(/expected "\d+"/gi, 'expected "[NUMBER]"')
     .replace(/received "\d+"/gi, 'received "[NUMBER]"')
     // Also handle expected/received with currency symbols
-    .replace(/expected string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi, 'expected string: "[CURRENCY]"')
-    .replace(/received string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi, 'received string: "[CURRENCY]"')
-    .replace(/Expected string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi, 'Expected string: "[CURRENCY]"')
-    .replace(/Received string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi, 'Received string: "[CURRENCY]"')
+    .replace(
+      /expected string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi,
+      'expected string: "[CURRENCY]"',
+    )
+    .replace(
+      /received string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi,
+      'received string: "[CURRENCY]"',
+    )
+    .replace(
+      /Expected string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi,
+      'Expected string: "[CURRENCY]"',
+    )
+    .replace(
+      /Received string: "([£$€¥₹]\d+(?:\.\d+)?)"/gi,
+      'Received string: "[CURRENCY]"',
+    )
     .replace(/\d+px/g, "[SIZE]px")
     .replace(/retry #\d+/gi, "retry #[N]")
     .replace(/attempt \d+/gi, "attempt [N]");
@@ -97,7 +112,7 @@ export async function GET(request: NextRequest) {
     const environment = searchParams.get("environment");
     const trigger = searchParams.get("trigger");
     const suite = searchParams.get("suite");
-    const testId = searchParams.get("testId"); // Filter by specific suite_test_id
+    const testId = searchParams.get("testId");
     const timeRange = searchParams.get("timeRange") || "7d";
     const minOccurrences = parseInt(searchParams.get("minOccurrences") || "2");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -117,26 +132,18 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
     // Get user's organizations
-    const { data: userOrgs } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .eq("user_id", userId);
-
-    const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
+    const userOrgIds = await repos.lookups.getUserOrganizations(userId);
 
     if (userOrgIds.length === 0) {
       return NextResponse.json({ patterns: [] });
     }
 
     // Get accessible projects
-    const { data: orgProjects } = await supabase
-      .from("organization_projects")
-      .select("project_id")
-      .in("organization_id", userOrgIds);
-
-    const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || [];
+    const accessibleProjectIds =
+      await repos.lookups.getAccessibleProjectIds(userOrgIds);
 
     if (accessibleProjectIds.length === 0) {
       return NextResponse.json({ patterns: [] });
@@ -169,67 +176,36 @@ export async function GET(request: NextRequest) {
     let suiteId = null;
 
     if (project && project !== "all") {
-      const { data: projData } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("name", project)
-        .eq("active", true)
-        .single();
+      const projData = await repos.projects.getProjectByName(project);
       if (projData) projectId = projData.id;
     }
 
     if (environment && environment !== "all") {
-      const { data: envData } = await supabase
-        .from("environments")
-        .select("id")
-        .eq("name", environment)
-        .eq("active", true)
-        .single();
+      const envData = await repos.lookups.getEnvironmentByName(environment);
       if (envData) environmentId = envData.id;
     }
 
     if (trigger && trigger !== "all") {
-      const { data: trigData } = await supabase
-        .from("test_triggers")
-        .select("id")
-        .eq("name", trigger)
-        .eq("active", true)
-        .single();
+      const trigData = await repos.lookups.getTriggerByName(trigger);
       if (trigData) triggerId = trigData.id;
     }
 
     if (suite && suite !== "all") {
-      const { data: suiteData } = await supabase
-        .from("suites")
-        .select("id")
-        .eq("name", suite)
-        .eq("active", true)
-        .single();
+      const suiteData = await repos.lookups.getSuiteByName(suite);
       if (suiteData) suiteId = suiteData.id;
     }
 
-    // Build query for test runs
-    let runsQuery = supabase
-      .from("test_runs")
-      .select("id, timestamp")
-      .in("project_id", accessibleProjectIds)
-      .gte("timestamp", startDate.toISOString())
-      .order("timestamp", { ascending: false });
-
-    if (projectId) {
-      if (!accessibleProjectIds.includes(projectId)) {
-        return NextResponse.json({ patterns: [] });
-      }
-      runsQuery = runsQuery.eq("project_id", projectId);
-    }
-    if (environmentId) {
-      runsQuery = runsQuery.eq("environment_id", environmentId);
-    }
-    if (triggerId) {
-      runsQuery = runsQuery.eq("trigger_id", triggerId);
+    if (projectId && !accessibleProjectIds.includes(projectId)) {
+      return NextResponse.json({ patterns: [] });
     }
 
-    const { data: runs } = await runsQuery;
+    const runs = await repos.testRuns.getTestRunsForFailureAnalysis(
+      accessibleProjectIds,
+      startDate,
+      projectId,
+      environmentId,
+      triggerId,
+    );
 
     if (!runs || runs.length === 0) {
       return NextResponse.json({ patterns: [] });
@@ -237,65 +213,34 @@ export async function GET(request: NextRequest) {
 
     const runIds = runs.map((r) => r.id);
 
-    // Get tests from these runs
-    let testsQuery = supabase
-      .from("tests")
-      .select(
-        `
-        id,
-        test_run_id,
-        suite_test_id,
-        status,
-        suite_tests!inner(name, file)
-      `,
-      )
-      .in("test_run_id", runIds);
-
-    // Filter by specific test if provided
-    if (testId) {
-      testsQuery = testsQuery.eq("suite_test_id", testId);
-    }
-
-    // Apply suite filter if needed
+    let suiteTestIdList: string[] | null = null;
     if (suiteId) {
-      const { data: suiteTestIds } = await supabase
-        .from("suite_tests")
-        .select("id")
-        .eq("suite_id", suiteId);
-
-      const suiteTestIdList = suiteTestIds?.map((st) => st.id) || [];
+      suiteTestIdList = await repos.testRuns.getSuiteTestIdsBySuite(suiteId);
 
       if (suiteTestIdList.length === 0) {
         return NextResponse.json({ patterns: [] });
       }
-
-      testsQuery = testsQuery.in("suite_test_id", suiteTestIdList);
     }
 
-    const { data: tests } = await testsQuery;
+    const tests = await repos.testRuns.getTestsForFailureAnalysis(
+      runIds,
+      testId,
+      suiteTestIdList,
+    );
 
     if (!tests || tests.length === 0) {
       return NextResponse.json({ patterns: [] });
     }
 
     const testIds = tests.map((t) => t.id);
-
-    // Get test results with steps and screenshots
-    // Analyze all failed attempts to capture flaky test failures
-    const { data: testResults } = await supabase
-      .from("test_results")
-      .select("id, test_id, status, duration, error, steps_url, last_failed_step, screenshots")
-      .in("test_id", testIds)
-      .eq("status", "failed"); // Only analyze failed attempts
+    const testResults = await repos.testRuns.getFailedTestResults(testIds);
 
     if (!testResults || testResults.length === 0) {
       return NextResponse.json({ patterns: [] });
     }
 
-    // Analyze patterns
     const stepAnalysis = new Map<string, StepAnalysis>();
 
-    // Process each test result
     for (const result of testResults) {
       const test = tests.find((t) => t.id === result.test_id);
       if (!test) continue;
@@ -303,22 +248,20 @@ export async function GET(request: NextRequest) {
       const suiteTest = test.suite_tests as
         | { name: string; file: string }
         | undefined;
-      
-      // Get the first screenshot if available
+
       const screenshots = result.screenshots as string[] | null;
-      const screenshot = screenshots && screenshots.length > 0 ? screenshots[0] : undefined;
-      
+      const screenshot =
+        screenshots && screenshots.length > 0 ? screenshots[0] : undefined;
+
       const testInfo = {
         testId: test.id,
         testName: suiteTest?.name || "Unknown",
         testFile: suiteTest?.file || "Unknown",
         testRunId: test.test_run_id,
-        timestamp:
-          runs.find((r) => r.id === test.test_run_id)?.timestamp || "",
+        timestamp: runs.find((r) => r.id === test.test_run_id)?.timestamp || "",
         screenshot,
       };
 
-      // If we have a last_failed_step, use it
       if (result.status === "failed" && result.last_failed_step) {
         const failedStep = result.last_failed_step as {
           title?: string;
@@ -348,12 +291,8 @@ export async function GET(request: NextRequest) {
         errorData.count++;
         errorData.tests.add(JSON.stringify(testInfo));
       }
-
-      // If we have steps_url, we could fetch and analyze (but that's expensive)
-      // For now, we'll rely on last_failed_step which is already extracted
     }
 
-    // Convert analysis to failure patterns
     const patterns: FailurePattern[] = [];
 
     for (const [stepTitle, analysis] of stepAnalysis.entries()) {
@@ -363,9 +302,12 @@ export async function GET(request: NextRequest) {
             .map((t) => JSON.parse(t))
             .slice(0, 10); // Limit to 10 examples
 
-          // Get the most recent screenshot from affected tests
           const latestScreenshot = affectedTests
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .sort(
+              (a, b) =>
+                new Date(b.timestamp).getTime() -
+                new Date(a.timestamp).getTime(),
+            )
             .find((t) => t.screenshot)?.screenshot;
 
           patterns.push({
@@ -375,17 +317,14 @@ export async function GET(request: NextRequest) {
             affectedTests,
             failureRate:
               (analysis.failureCount / analysis.totalOccurrences) * 100,
-            avgDuration: 0, // Could calculate if we store step durations
+            avgDuration: 0,
             latestScreenshot,
           });
         }
       }
     }
 
-    // Sort by occurrences (most common first)
     patterns.sort((a, b) => b.occurrences - a.occurrences);
-
-    // Limit results
     const limitedPatterns = patterns.slice(0, limit);
 
     return NextResponse.json({

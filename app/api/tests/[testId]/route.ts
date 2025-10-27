@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
 export async function GET(
   request: NextRequest,
@@ -28,15 +29,13 @@ export async function GET(
       process.env.SUPABASE_ANON_KEY,
     );
 
-    // First, get the suite_test definition
-    const { data: suiteTest, error: suiteTestError } = await supabase
-      .from("suite_tests")
-      .select("id, project_id, file, name")
-      .eq("id", suiteTestId)
-      .single();
+    const repos = createRepositories(supabase);
 
-    if (suiteTestError || !suiteTest) {
-      console.error("[API] Error fetching suite test:", suiteTestError);
+    // First, get the suite_test definition
+    const suiteTest = await repos.testRuns.getSuiteTestById(suiteTestId);
+
+    if (!suiteTest) {
+      console.error("[API] Suite test not found");
       return NextResponse.json({ error: "Test not found" }, { status: 404 });
     }
 
@@ -58,52 +57,26 @@ export async function GET(
     }
 
     // Look up environment/trigger IDs if filters are provided
-    let environmentId = null;
-    let triggerId = null;
+    let environmentId: string | null = null;
+    let triggerId: string | null = null;
 
     if (environment && environment !== "all") {
-      const { data: envData } = await supabase
-        .from("environments")
-        .select("id")
-        .eq("name", environment)
-        .eq("active", true)
-        .single();
-
+      const envData = await repos.lookups.getEnvironmentByName(environment);
       if (envData) environmentId = envData.id;
     }
 
     if (trigger && trigger !== "all") {
-      const { data: trigData } = await supabase
-        .from("test_triggers")
-        .select("id")
-        .eq("name", trigger)
-        .eq("active", true)
-        .single();
-
+      const trigData = await repos.lookups.getTriggerByName(trigger);
       if (trigData) triggerId = trigData.id;
     }
 
-    // Build query for test_runs with filters (for this project only)
-    let runsQuery = supabase
-      .from("test_runs")
-      .select("id, timestamp, branch")
-      .eq("project_id", suiteTest.project_id)
-      .gte("timestamp", startDate.toISOString())
-      .order("timestamp", { ascending: true });
-
-    if (environmentId) {
-      runsQuery = runsQuery.eq("environment_id", environmentId);
-    }
-    if (triggerId) {
-      runsQuery = runsQuery.eq("trigger_id", triggerId);
-    }
-
-    const { data: runs, error: runsError } = await runsQuery;
-
-    if (runsError) {
-      console.error("[API] Error fetching test runs:", runsError);
-      return NextResponse.json({ error: runsError.message }, { status: 500 });
-    }
+    // Get test runs with filters (for this project only)
+    const runs = await repos.testRuns.getTestRunsInDateRange(
+      suiteTest.project_id,
+      startDate,
+      environmentId,
+      triggerId,
+    );
 
     if (!runs || runs.length === 0) {
       return NextResponse.json({
@@ -123,33 +96,7 @@ export async function GET(
 
     const runIds = runs.map((r) => r.id);
 
-    const { data: tests, error: testsError} = await supabase
-      .from("tests")
-      .select(
-        `
-        id,
-        status, 
-        duration,
-        attempts,
-        test_run_id, 
-        created_at, 
-        started_at,
-        test_runs!inner(
-          id,
-          branch,
-          environments(name),
-          test_triggers(name)
-        )
-      `,
-      )
-      .order("started_at", { ascending: true })
-      .in("test_run_id", runIds)
-      .eq("suite_test_id", suiteTestId);
-
-    if (testsError) {
-      console.error("[API] Error fetching tests:", testsError);
-      return NextResponse.json({ error: testsError.message }, { status: 500 });
-    }
+    const tests = await repos.testRuns.getTestHistory(suiteTestId, runIds);
 
     // Build history with run context
     const history = (tests || []).map((test: any) => {
@@ -170,12 +117,13 @@ export async function GET(
     const passed = tests?.filter((t) => t.status === "passed").length || 0;
     const failed = tests?.filter((t) => t.status === "failed").length || 0;
     const flaky = tests?.filter((t) => t.status === "flaky").length || 0;
-    
+
     // Calculate average duration per attempt (not total duration)
-    const totalDuration = tests?.reduce((sum, t) => {
-      const attempts = t.attempts || 1;
-      return sum + (t.duration || 0) / attempts;
-    }, 0) || 0;
+    const totalDuration =
+      tests?.reduce((sum, t) => {
+        const attempts = t.attempts || 1;
+        return sum + (t.duration || 0) / attempts;
+      }, 0) || 0;
 
     const summary = {
       totalRuns,

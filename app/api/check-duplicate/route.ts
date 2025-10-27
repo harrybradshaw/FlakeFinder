@@ -3,13 +3,10 @@ import {
   processPlaywrightReportFile,
   ReportProcessingError,
   calculateContentHash,
-  type TestResult,
 } from "@/lib/playwright-report-utils";
 import { type Database } from "@/types/supabase";
-
-// Configure route to accept larger payloads (up to 100MB)
-export const maxDuration = 60; // 60 seconds timeout
-export const dynamic = "force-dynamic";
+import { createRepositories } from "@/lib/repositories";
+import { type ExtractedTest } from "@/types/extracted-test";
 
 interface DuplicateCheckResult {
   success: boolean;
@@ -29,16 +26,6 @@ interface DuplicateCheckResult {
   };
 }
 
-/**
- * POST /api/check-duplicate
- *
- * Checks for duplicate test runs by comparing a content hash
- * with existing runs in the database.
- *
- * Accepts either:
- * 1. Hash-only mode (efficient): contentHash + metadata only
- * 2. Legacy mode (wasteful): Full file upload
- */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -48,6 +35,7 @@ export async function POST(request: NextRequest) {
     const branch = formData.get("branch") as string | null;
     const commit = formData.get("commit") as string | null;
     const preCalculatedHash = formData.get("contentHash") as string | null;
+    const suite = formData.get("suite") as string | null;
 
     // Validate required fields - file is now optional if hash is provided
     if (!environment || !trigger || !branch) {
@@ -66,7 +54,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Must have either a hash or a file
     if (!preCalculatedHash && !file) {
       return NextResponse.json(
         {
@@ -78,30 +65,17 @@ export async function POST(request: NextRequest) {
     }
 
     let contentHash: string;
-    let tests: TestResult[] | undefined;
+    let tests: ExtractedTest[] | undefined;
     let metadata: Record<string, any> | undefined;
 
-    // Efficient path: hash-only check (no file processing needed)
     if (preCalculatedHash && !file) {
-      console.log(
-        "[Duplicate Check] Hash-only mode (efficient):",
-        preCalculatedHash,
-      );
       contentHash = preCalculatedHash;
-      // No test count available in hash-only mode
     } else if (preCalculatedHash && file) {
-      // Hybrid mode: hash provided but also have file (legacy compatibility)
-      console.log(
-        "[Duplicate Check] Hybrid mode - using pre-calculated hash:",
-        preCalculatedHash,
-      );
       contentHash = preCalculatedHash;
-      // Still process file to get test count for backwards compatibility
       const processed = await processPlaywrightReportFile(file);
       tests = processed.tests;
       metadata = processed.metadata;
     } else {
-      // Legacy path: calculate hash from file (wasteful)
       console.log(
         "[Duplicate Check] Legacy mode - calculating hash from file (wasteful)",
       );
@@ -119,12 +93,11 @@ export async function POST(request: NextRequest) {
       contentHash = await calculateContentHash(tests);
     }
 
-    // Check for duplicates in the database
-    const duplicateCheck = await checkForDuplicateRun(contentHash);
+    const duplicateCheck = await checkForDuplicateRun(contentHash, suite);
 
     const result: DuplicateCheckResult = {
       success: true,
-      testCount: tests?.length, // Optional in hash-only mode
+      testCount: tests?.length,
       hasDuplicates: duplicateCheck.isDuplicate,
       duplicateCount: duplicateCheck.isDuplicate ? 1 : 0,
       metadata: {
@@ -165,10 +138,10 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Checks if a test run with the given hash already exists in the database
- */
-async function checkForDuplicateRun(contentHash: string): Promise<{
+async function checkForDuplicateRun(
+  contentHash: string,
+  suite: string | null,
+): Promise<{
   isDuplicate: boolean;
   existingRun?: {
     id: string;
@@ -186,26 +159,25 @@ async function checkForDuplicateRun(contentHash: string): Promise<{
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
-    const { data: existingRuns, error } = await supabase
-      .from("test_runs")
-      .select("id, timestamp")
-      .eq("content_hash", contentHash)
-      .order("timestamp", { ascending: false })
-      .limit(1);
-
-    if (error) {
-      console.error("[Duplicate Check] Database error:", error);
-      throw error;
+    let projectId: string | null = null;
+    if (suite && suite !== "all") {
+      projectId = await repos.lookups.getSuiteProjectId(suite);
     }
 
-    if (existingRuns && existingRuns.length > 0) {
-      console.log("[Duplicate Check] Duplicate found:", existingRuns[0]);
+    const existingRun = await repos.testRuns.findDuplicateByContentHash(
+      contentHash,
+      projectId,
+    );
+
+    if (existingRun) {
+      console.log("[Duplicate Check] Duplicate found:", existingRun);
       return {
         isDuplicate: true,
         existingRun: {
-          id: existingRuns[0].id,
-          timestamp: existingRuns[0].timestamp,
+          id: existingRun.id,
+          timestamp: existingRun.timestamp,
         },
       };
     }
@@ -213,8 +185,6 @@ async function checkForDuplicateRun(contentHash: string): Promise<{
     return { isDuplicate: false };
   } catch (error) {
     console.error("[Duplicate Check] Error:", error);
-    // If there's an error checking for duplicates, we'll assume it's not a duplicate
-    // rather than failing the entire operation
     return { isDuplicate: false };
   }
 }

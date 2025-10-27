@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import useSWRImmutable from "swr/immutable";
 import { Card } from "@/components/ui/card";
@@ -55,11 +56,21 @@ const configFetcher = async (url: string) => {
 };
 
 export default function TestsPage() {
+  const searchParams = useSearchParams();
+  const projectFilter = searchParams.get("project") || "all";
+
   const [selectedEnvironment, setSelectedEnvironment] = useState<string>("all");
   const [selectedTrigger, setSelectedTrigger] = useState<string>("all");
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("30d");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("health");
+
+  // Check if user is a member of any organization
+  const { data: userOrgsData } = useSWRImmutable(
+    "/api/user/organizations",
+    configFetcher,
+  );
+  const hasOrganization = (userOrgsData?.organizations?.length || 0) > 0;
 
   // Fetch environments and triggers dynamically (immutable - these rarely change)
   const { data: environmentsData } = useSWRImmutable(
@@ -80,6 +91,9 @@ export default function TestsPage() {
       timeRange: selectedTimeRange,
     });
 
+    if (projectFilter !== "all") {
+      params.append("project", projectFilter);
+    }
     if (selectedEnvironment !== "all") {
       params.append("environment", selectedEnvironment);
     }
@@ -88,7 +102,7 @@ export default function TestsPage() {
     }
 
     return `/api/tests?${params.toString()}`;
-  }, [selectedEnvironment, selectedTrigger, selectedTimeRange]);
+  }, [projectFilter, selectedEnvironment, selectedTrigger, selectedTimeRange]);
 
   const {
     data: tests,
@@ -152,29 +166,61 @@ export default function TestsPage() {
     return <Minus className="h-4 w-4 text-yellow-500" />;
   };
 
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Link href="/" prefetch={false}>
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-semibold text-foreground">
-                Test Health Dashboard
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Monitor test reliability and flakiness across runs
-              </p>
+  // Show message if user doesn't have an organization
+  if (!hasOrganization) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b border-border bg-card">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center gap-4">
+              <Link href="/" prefetch={false}>
+                <Button variant="ghost" size="icon">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-2xl font-semibold text-foreground">
+                  Test Health Dashboard
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Monitor test reliability and flakiness across runs
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
+        <main className="container mx-auto px-4 py-6">
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <div className="text-center max-w-md">
+              <h3 className="text-lg font-semibold mb-2">
+                No Organization Access
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                You need to be a member of an organization to view test health
+                data. Please contact an organization owner to be added.
+              </p>
+              <Link href="/" prefetch={false}>
+                <Button>Return to Dashboard</Button>
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
       <main className="container mx-auto px-4 py-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-foreground">
+            Test Health Dashboard
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Monitor test reliability and flakiness across runs
+          </p>
+        </div>
         {/* Filters */}
         <div className="mb-6 flex flex-wrap items-center gap-4">
           <div className="relative flex-1 min-w-[200px]">

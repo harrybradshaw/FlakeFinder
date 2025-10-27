@@ -1,8 +1,5 @@
-/**
- * Shared API response types for type-safe communication between API routes and frontend
- */
+import { type ExtractedTestAttempt } from "@/types/extracted-test";
 
-// Test step structure (hierarchical)
 export interface TestStep {
   title: string;
   category?: string; // e.g., "hook", "expect", "pw:api", "test.step"
@@ -11,7 +8,6 @@ export interface TestStep {
   error?:
     | string
     | {
-        // Can be string or object
         message: string;
         stack?: string;
       };
@@ -20,22 +16,21 @@ export interface TestStep {
     line: number;
     column: number;
   };
-  steps?: TestStep[]; // Nested steps for hierarchy
+  steps?: TestStep[];
 }
 
-// Test attempt/retry structure
 export interface TestAttempt {
   attemptIndex: number;
-  retry_index?: number; // Legacy support
-  retryIndex?: number; // Legacy support
-  id?: string; // Test result ID for lazy loading steps
+  retry_index?: number;
+  retryIndex?: number;
+  id?: string;
   testResultId?: string; // Alternative field name
   status: string;
   duration: number;
   error?: string;
   errorStack?: string;
   error_stack?: string; // Legacy support
-  screenshots?: string[];
+  screenshots: string[];
   attachments?: Array<{
     name: string;
     contentType: string;
@@ -43,7 +38,6 @@ export interface TestAttempt {
   }>;
   startTime?: string;
   started_at?: string; // Legacy support
-  steps?: TestStep[]; // Test execution steps (inline)
   stepsUrl?: string; // URL to lazy load steps from storage
   lastFailedStep?: {
     title: string;
@@ -52,35 +46,6 @@ export interface TestAttempt {
   };
 }
 
-// Test details response from /api/test-runs/[id]/tests/[testId]
-export interface TestDetailsResponse {
-  test: {
-    id: string;
-    suite_test_id?: string;
-    name: string;
-    file: string;
-    status: "passed" | "failed" | "flaky" | "skipped" | "timedOut";
-    duration: number;
-    error?: string;
-    screenshots?: string[];
-    started_at?: string;
-    metadata?: {
-      browser?: string;
-      tags?: string[];
-      annotations?: any[];
-      epic?: string;
-      labels?: Array<{ name: string; value: string }>;
-      parameters?: Array<{ name: string; value: string }>;
-      description?: string;
-      descriptionHtml?: string;
-    };
-    attempts: TestAttempt[];
-    // Legacy support
-    retryResults?: TestAttempt[];
-  };
-}
-
-// Test in a test run
 export interface TestInRun {
   id: string;
   suite_test_id?: string;
@@ -91,7 +56,7 @@ export interface TestInRun {
   worker_index?: number;
   started_at?: string;
   error?: string;
-  screenshots?: string[];
+  screenshots: string[];
   metadata?: {
     browser?: string;
     tags?: string[];
@@ -102,39 +67,13 @@ export interface TestInRun {
     description?: string;
     descriptionHtml?: string;
   };
-  attempts?: TestAttempt[];
-  // Legacy support
-  retryResults?: TestAttempt[];
+  attempts: TestAttempt[];
 }
 
-// Test run response
-export interface TestRunResponse {
-  id: string;
-  timestamp: string;
-  project?: string;
-  project_display?: string;
-  project_color?: string;
-  environment: string;
-  environment_display?: string;
-  environment_color?: string;
-  trigger: string;
-  trigger_display?: string;
-  trigger_icon?: string;
-  branch: string;
-  commit: string;
-  total: number;
-  passed: number;
-  failed: number;
-  flaky: number;
-  skipped?: number;
-  duration: string;
-  hasScreenshots?: boolean;
-  uploaded_filename?: string;
-  ci_metadata?: Record<string, any>;
-  tests?: TestInRun[];
+export interface TestDetailsResponse {
+  test: TestInRun;
 }
 
-// Test history item for /api/tests/[testId]
 export interface TestHistoryItem {
   testRunId: string;
   timestamp: string;
@@ -146,7 +85,6 @@ export interface TestHistoryItem {
   branch?: string;
 }
 
-// Test detail page response
 export interface TestDetailResponse {
   name: string;
   file: string;
@@ -158,4 +96,88 @@ export interface TestDetailResponse {
     flakyRate: string;
     avgDuration: number;
   };
+}
+
+export interface Environment {
+  id: string;
+  name: string;
+  display_name: string;
+  color?: string;
+  active: boolean;
+  created_at?: string;
+}
+
+export interface Trigger {
+  id: string;
+  name: string;
+  display_name: string;
+  icon: string;
+  active: boolean;
+  created_at?: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  display_name: string;
+  color: string;
+  active?: boolean;
+  created_at?: string;
+}
+
+export interface Suite {
+  id: string;
+  name: string;
+  description?: string;
+  project_id: string;
+  project?: Project;
+  active?: boolean;
+  created_at?: string;
+}
+
+// API Response types
+export interface EnvironmentsResponse {
+  environments: Environment[];
+}
+
+export interface TriggersResponse {
+  triggers: Trigger[];
+}
+
+export interface SuitesResponse {
+  suites: Suite[];
+}
+
+export interface TestRun {
+  id: string;
+  timestamp: string;
+  project: string;
+  project_display: string;
+  project_color: string;
+  environmentName: string;
+  environment_display: string;
+  environment_color: string;
+  triggerName: string;
+  trigger_display: string;
+  trigger_icon: string;
+  branch: string;
+  commit: string;
+  total: number;
+  passed: number;
+  failed: number;
+  flaky: number;
+  skipped: number;
+  duration: string;
+  uploaded_filename?: string | null;
+}
+
+export interface TestRunsResponse {
+  runs: TestRun[];
+  total: number;
+}
+
+export interface TestRunDetails extends TestRun {
+  ci_metadata?: Record<string, any>;
+  environment_data?: Record<string, any>;
+  tests: TestInRun[];
 }

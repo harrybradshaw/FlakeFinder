@@ -5,20 +5,7 @@ import { readFileSync } from "fs";
 
 // Mock the Supabase client
 vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          order: vi.fn(() => ({
-            limit: vi.fn(() => ({
-              data: null,
-              error: null,
-            })),
-          })),
-        })),
-      })),
-    })),
-  })),
+  createClient: vi.fn(),
 }));
 
 describe("POST /api/check-duplicate", () => {
@@ -29,9 +16,13 @@ describe("POST /api/check-duplicate", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    testReportFile = new File([buffer], "playwright-report-testing-466.zip", {
-      type: "application/zip",
-    });
+    testReportFile = new File(
+      [buffer as any],
+      "playwright-report-testing-466.zip",
+      {
+        type: "application/zip",
+      },
+    );
 
     // Set up environment variables
     process.env.SUPABASE_URL = "https://test.supabase.co";
@@ -204,7 +195,7 @@ describe("POST /api/check-duplicate", () => {
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
     const testReportFile2 = new File(
-      [buffer],
+      [buffer as any],
       "playwright-report-testing-466.zip",
       {
         type: "application/zip",

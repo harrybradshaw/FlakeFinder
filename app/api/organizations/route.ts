@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
 // Cached function to get user's organizations with details
 const getUserOrganizationsWithDetails = cache(async (userId: string) => {
@@ -14,28 +15,15 @@ const getUserOrganizationsWithDetails = cache(async (userId: string) => {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
+  const repos = createRepositories(supabase);
 
-  const { data: userOrgs, error: userOrgsError } = await supabase
-    .from("user_organizations")
-    .select(
-      `
-        *,
-        organization:organizations(*)
-      `,
-    )
-    .eq("user_id", userId);
-
-  if (userOrgsError) {
-    return { organizations: [], error: userOrgsError };
+  try {
+    const organizations =
+      await repos.organizations.getOrganizationsWithRole(userId);
+    return { organizations, error: null };
+  } catch (error) {
+    return { organizations: [], error };
   }
-
-  const organizations =
-    userOrgs?.map((uo) => ({
-      ...uo.organization,
-      role: uo.role,
-    })) || [];
-
-  return { organizations, error: null };
 });
 
 // GET - List all organizations the user belongs to
@@ -63,10 +51,11 @@ export async function GET() {
 
     if (userOrgsError) {
       console.error("[API] Error fetching user organizations:", userOrgsError);
-      return NextResponse.json(
-        { error: userOrgsError.message },
-        { status: 500 },
-      );
+      const errorMessage =
+        userOrgsError instanceof Error
+          ? userOrgsError.message
+          : "Failed to fetch user organizations";
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 
     return NextResponse.json({ organizations });
@@ -115,38 +104,31 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
     // Create the organization
-    const { data: orgData, error: orgError } = await supabase
-      .from("organizations")
-      .insert({
-        name,
-        display_name,
-        description,
-        active: true,
-      })
-      .select()
-      .single();
-
-    if (orgError) {
-      console.error("[API] Failed to create organization:", orgError);
-      return NextResponse.json({ error: orgError.message }, { status: 500 });
-    }
+    const orgData = await repos.organizations.createOrganization({
+      name,
+      display_name,
+      description,
+      active: true,
+    });
 
     // Add the creating user as an owner
-    const { error: memberError } = await supabase
-      .from("user_organizations")
-      .insert({
-        user_id: userId,
-        organization_id: orgData.id,
-        role: "owner",
-      });
-
-    if (memberError) {
+    try {
+      await repos.organizations.addMember(orgData.id, userId, "owner");
+    } catch (memberError) {
       console.error("[API] Failed to add user to organization:", memberError);
       // Rollback organization creation
-      await supabase.from("organizations").delete().eq("id", orgData.id);
-      return NextResponse.json({ error: memberError.message }, { status: 500 });
+      try {
+        await repos.organizations.deleteOrganization(orgData.id);
+      } catch (deleteError) {
+        console.error(
+          "[API] Failed to roll back organization creation:",
+          deleteError,
+        );
+      }
+      throw memberError;
     }
 
     return NextResponse.json({ organization: orgData });

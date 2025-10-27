@@ -52,7 +52,6 @@ const fetcher = async (url: string) => {
   return response.json();
 };
 
-// Component to lazy-load specific test details from a run
 function TestRunDetails({
   testRunId,
   suiteTestId,
@@ -94,54 +93,18 @@ function TestRunDetails({
   }
 
   const testCase = data.test;
-
-  // Transform to match TestCaseDetails interface with unified attempts structure
-  let attempts: any[];
-
-  if (testCase.attempts) {
-    // New format: already has attempts
-    attempts = testCase.attempts;
-  } else if (testCase.retryResults && testCase.retryResults.length > 0) {
-    // Legacy format: convert retryResults to attempts
-    attempts = testCase.retryResults.map((retry: any) => ({
-      attemptIndex: retry.retry_index ?? retry.retryIndex ?? 0,
-      status: retry.status,
-      duration: retry.duration,
-      error: retry.error,
-      errorStack: retry.error_stack ?? retry.errorStack,
-      screenshots: retry.screenshots || [],
-      attachments: retry.attachments || [],
-      startTime: retry.started_at || retry.startTime,
-    }));
-  } else {
-    // No retries: create single attempt from test data
-    attempts = [
-      {
-        attemptIndex: 0,
-        status: testCase.status === "timedOut" ? "failed" : testCase.status,
-        duration: testCase.duration,
-        error: testCase.error,
-        errorStack: undefined,
-        screenshots: testCase.screenshots || [],
-        attachments: [],
-        startTime: testCase.started_at,
-      },
-    ];
-  }
-
   const testCaseForDetails = {
     id: testCase.id,
     name: testCase.name,
     file: testCase.file,
     status: testCase.status === "timedOut" ? "failed" : testCase.status,
     duration: `${(testCase.duration / 1000).toFixed(2)}s`,
-    attempts,
+    attempts: testCase.attempts,
   };
 
   return <TestCaseDetails testCase={testCaseForDetails} />;
 }
 
-// Wrapper component to manage test ID state
 function TestHistoryItem({
   item,
   suiteTestId,
@@ -236,7 +199,6 @@ export default function TestDetailPage({
   const [selectedTrigger, setSelectedTrigger] = useState<string>("all");
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("30d");
 
-  // Fetch environments and triggers dynamically (immutable - these rarely change)
   const { data: environmentsData } = useSWRImmutable<{ environments: any[] }>(
     "/api/environments",
     fetcher,
@@ -249,7 +211,6 @@ export default function TestDetailPage({
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
 
-  // Build API URL
   const apiUrl = useMemo(() => {
     const searchParams = new URLSearchParams({
       timeRange: selectedTimeRange,
@@ -330,7 +291,6 @@ export default function TestDetailPage({
           stats.skipped++;
           break;
       }
-      // Add duration tracking - divide by attempts to get per-attempt average
       if (item.duration && item.attempts) {
         stats.totalDuration += item.duration / item.attempts;
         stats.count++;
@@ -344,8 +304,10 @@ export default function TestDetailPage({
         failed: stats.failed,
         flaky: stats.flaky,
         skipped: stats.skipped,
-        // Duration is already in milliseconds, convert to seconds
-        avgDuration: stats.count > 0 ? Math.round(stats.totalDuration / stats.count / 1000) : 0,
+        avgDuration:
+          stats.count > 0
+            ? Math.round(stats.totalDuration / stats.count / 1000)
+            : 0,
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [data]);
@@ -431,7 +393,6 @@ export default function TestDetailPage({
           </div>
         ) : (
           <>
-            {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
               <Card className="p-4">
                 <div className="flex items-center gap-3">
@@ -487,10 +448,8 @@ export default function TestDetailPage({
               </Card>
             </div>
 
-            {/* Charts */}
             {chartData && chartData.length > 0 && (
               <div className="grid grid-cols-3 gap-6 mb-6">
-                {/* Test Results Chart - 2/3 width */}
                 <Card className="p-6 col-span-2">
                   <h3 className="text-lg font-semibold mb-4">
                     Test Results Over Time
@@ -543,11 +502,8 @@ export default function TestDetailPage({
                   </ResponsiveContainer>
                 </Card>
 
-                {/* Duration Trend Chart - 1/3 width */}
                 <Card className="p-6 col-span-1">
-                  <h3 className="text-lg font-semibold mb-4">
-                    Duration Trend
-                  </h3>
+                  <h3 className="text-lg font-semibold mb-4">Duration Trend</h3>
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={chartData}>
                       <CartesianGrid
@@ -562,7 +518,11 @@ export default function TestDetailPage({
                       <YAxis
                         stroke="hsl(var(--muted-foreground))"
                         fontSize={12}
-                        label={{ value: 's', angle: -90, position: 'insideLeft' }}
+                        label={{
+                          value: "s",
+                          angle: -90,
+                          position: "insideLeft",
+                        }}
                       />
                       <Tooltip
                         contentStyle={{
@@ -570,7 +530,7 @@ export default function TestDetailPage({
                           border: "1px solid hsl(var(--border))",
                           borderRadius: "8px",
                         }}
-                        formatter={(value: number) => [`${value}s`, 'Duration']}
+                        formatter={(value: number) => [`${value}s`, "Duration"]}
                       />
                       <Line
                         type="monotone"
@@ -586,7 +546,6 @@ export default function TestDetailPage({
               </div>
             )}
 
-            {/* Failure Patterns */}
             <div className="mb-6">
               <FailurePatterns
                 timeRange={selectedTimeRange}
@@ -596,7 +555,6 @@ export default function TestDetailPage({
               />
             </div>
 
-            {/* Recent History */}
             <Card className="p-6">
               <h2 className="text-lg font-semibold mb-4">
                 Recent Runs ({data?.history.length || 0})

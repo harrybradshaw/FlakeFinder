@@ -6,8 +6,14 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(),
 }));
 
+// Mock repositories
+vi.mock("@/lib/repositories", () => ({
+  createRepositories: vi.fn(),
+}));
+
 describe("test-runs", () => {
   let mockSupabaseClient: any;
+  let mockRepos: any;
   const originalEnv = { ...process.env };
 
   beforeEach(async () => {
@@ -18,8 +24,24 @@ describe("test-runs", () => {
       from: vi.fn(),
     };
 
+    // Setup mock repositories
+    mockRepos = {
+      testRuns: {
+        getTestRunWithFullDetails: vi.fn(),
+        getTestsWithSuiteDetails: vi.fn(),
+        getTestResultsForTests: vi.fn(),
+      },
+      lookups: {
+        getUserOrganizations: vi.fn(),
+        getAccessibleProjectIds: vi.fn(),
+      },
+    };
+
     const { createClient } = await import("@supabase/supabase-js");
     vi.mocked(createClient).mockReturnValue(mockSupabaseClient);
+
+    const { createRepositories } = await import("@/lib/repositories");
+    vi.mocked(createRepositories).mockReturnValue(mockRepos);
 
     // Set environment variables
     process.env.SUPABASE_URL = "https://test.supabase.co";
@@ -134,37 +156,14 @@ describe("test-runs", () => {
         },
       ];
 
-      // Mock test_runs query
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({ data: mockTestRun, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "tests") {
-          return {
-            select: () => ({
-              eq: () => ({
-                order: () => ({ data: mockTests, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "test_results") {
-          return {
-            select: () => ({
-              in: () => ({
-                order: () => ({ data: mockTestAttempts, error: null }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      // Mock repository methods
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(
+        mockTestRun,
+      );
+      mockRepos.testRuns.getTestsWithSuiteDetails.mockResolvedValue(mockTests);
+      mockRepos.testRuns.getTestResultsForTests.mockResolvedValue(
+        mockTestAttempts,
+      );
 
       const result = await getTestRunById("run-123");
 
@@ -173,10 +172,10 @@ describe("test-runs", () => {
       expect(result?.project).toBe("test-project");
       expect(result?.project_display).toBe("Test Project");
       expect(result?.project_color).toBe("#ff0000");
-      expect(result?.environment).toBe("production");
+      expect(result?.environmentName).toBe("production");
       expect(result?.environment_display).toBe("Production");
       expect(result?.environment_color).toBe("#00ff00");
-      expect(result?.trigger).toBe("ci");
+      expect(result?.triggerName).toBe("ci");
       expect(result?.trigger_display).toBe("CI");
       expect(result?.trigger_icon).toBe("🔄");
       expect(result?.branch).toBe("main");
@@ -275,36 +274,11 @@ describe("test-runs", () => {
         },
       ];
 
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({ data: mockTestRun, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "tests") {
-          return {
-            select: () => ({
-              eq: () => ({
-                order: () => ({ data: mockTests, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "test_results") {
-          return {
-            select: () => ({
-              in: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(
+        mockTestRun,
+      );
+      mockRepos.testRuns.getTestsWithSuiteDetails.mockResolvedValue(mockTests);
+      mockRepos.testRuns.getTestResultsForTests.mockResolvedValue([]);
 
       const result = await getTestRunById("run-456");
 
@@ -314,21 +288,7 @@ describe("test-runs", () => {
     });
 
     it("should return null when test run not found", async () => {
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({
-                  data: null,
-                  error: { code: "PGRST116" },
-                }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(null);
 
       const result = await getTestRunById("nonexistent");
 
@@ -336,24 +296,12 @@ describe("test-runs", () => {
     });
 
     it("should throw error when database query fails", async () => {
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({
-                  data: null,
-                  error: { code: "PGRST500", message: "Database error" },
-                }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.testRuns.getTestRunWithFullDetails.mockRejectedValue(
+        new Error("Failed to fetch test run: Database error"),
+      );
 
       await expect(getTestRunById("run-123")).rejects.toThrow(
-        "Error fetching test run: Database error",
+        "Failed to fetch test run: Database error",
       );
     });
 
@@ -398,36 +346,11 @@ describe("test-runs", () => {
         },
       ];
 
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({ data: mockTestRun, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "tests") {
-          return {
-            select: () => ({
-              eq: () => ({
-                order: () => ({ data: mockTests, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "test_results") {
-          return {
-            select: () => ({
-              in: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(
+        mockTestRun,
+      );
+      mockRepos.testRuns.getTestsWithSuiteDetails.mockResolvedValue(mockTests);
+      mockRepos.testRuns.getTestResultsForTests.mockResolvedValue([]);
 
       const result = await getTestRunById("run-789");
 
@@ -464,36 +387,11 @@ describe("test-runs", () => {
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({ data: mockTestRun, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "tests") {
-          return {
-            select: () => ({
-              eq: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "test_results") {
-          return {
-            select: () => ({
-              in: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(
+        mockTestRun,
+      );
+      mockRepos.testRuns.getTestsWithSuiteDetails.mockResolvedValue([]);
+      mockRepos.testRuns.getTestResultsForTests.mockResolvedValue([]);
 
       const result = await getTestRunById("run-999");
 
@@ -528,36 +426,11 @@ describe("test-runs", () => {
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({ data: mockTestRun, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "tests") {
-          return {
-            select: () => ({
-              eq: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "test_results") {
-          return {
-            select: () => ({
-              in: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(
+        mockTestRun,
+      );
+      mockRepos.testRuns.getTestsWithSuiteDetails.mockResolvedValue([]);
+      mockRepos.testRuns.getTestResultsForTests.mockResolvedValue([]);
 
       const result = await getTestRunById("run-888");
 
@@ -610,55 +483,13 @@ describe("test-runs", () => {
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
-      const mockUserOrgs = [{ organization_id: "org-1" }];
-      const mockOrgProjects = [
-        { project_id: "proj-1", organization_id: "org-1" },
-      ];
-
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "user_organizations") {
-          return {
-            select: () => ({
-              eq: () => ({ data: mockUserOrgs, error: null }),
-            }),
-          };
-        }
-        if (table === "organization_projects") {
-          return {
-            select: () => ({
-              in: () => ({ data: mockOrgProjects, error: null }),
-            }),
-          };
-        }
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({ data: mockTestRun, error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "tests") {
-          return {
-            select: () => ({
-              eq: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        if (table === "test_results") {
-          return {
-            select: () => ({
-              in: () => ({
-                order: () => ({ data: [], error: null }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.lookups.getUserOrganizations.mockResolvedValue(["org-1"]);
+      mockRepos.lookups.getAccessibleProjectIds.mockResolvedValue(["proj-1"]);
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(
+        mockTestRun,
+      );
+      mockRepos.testRuns.getTestsWithSuiteDetails.mockResolvedValue([]);
+      mockRepos.testRuns.getTestResultsForTests.mockResolvedValue([]);
 
       const result = await getTestRun("run-auth-1", "user-123");
 
@@ -667,16 +498,7 @@ describe("test-runs", () => {
     });
 
     it("should return null when user has no organizations", async () => {
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "user_organizations") {
-          return {
-            select: () => ({
-              eq: () => ({ data: [], error: null }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.lookups.getUserOrganizations.mockResolvedValue([]);
 
       const result = await getTestRun("run-auth-1", "user-123");
 
@@ -684,25 +506,8 @@ describe("test-runs", () => {
     });
 
     it("should return null when user has no accessible projects", async () => {
-      const mockUserOrgs = [{ organization_id: "org-1" }];
-
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "user_organizations") {
-          return {
-            select: () => ({
-              eq: () => ({ data: mockUserOrgs, error: null }),
-            }),
-          };
-        }
-        if (table === "organization_projects") {
-          return {
-            select: () => ({
-              in: () => ({ data: [], error: null }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.lookups.getUserOrganizations.mockResolvedValue(["org-1"]);
+      mockRepos.lookups.getAccessibleProjectIds.mockResolvedValue([]);
 
       const result = await getTestRun("run-auth-1", "user-123");
 
@@ -736,37 +541,11 @@ describe("test-runs", () => {
         trigger: { name: "ci", display_name: "CI", icon: "🔄" },
       };
 
-      const mockUserOrgs = [{ organization_id: "org-1" }];
-      const mockOrgProjects = [
-        { project_id: "proj-1", organization_id: "org-1" },
-      ];
-
-      mockSupabaseClient.from.mockImplementation((table: string) => {
-        if (table === "user_organizations") {
-          return {
-            select: () => ({
-              eq: () => ({ data: mockUserOrgs, error: null }),
-            }),
-          };
-        }
-        if (table === "organization_projects") {
-          return {
-            select: () => ({
-              in: () => ({ data: mockOrgProjects, error: null }),
-            }),
-          };
-        }
-        if (table === "test_runs") {
-          return {
-            select: () => ({
-              eq: () => ({
-                single: async () => ({ data: mockTestRun, error: null }),
-              }),
-            }),
-          };
-        }
-        return {};
-      });
+      mockRepos.lookups.getUserOrganizations.mockResolvedValue(["org-1"]);
+      mockRepos.lookups.getAccessibleProjectIds.mockResolvedValue(["proj-1"]);
+      mockRepos.testRuns.getTestRunWithFullDetails.mockResolvedValue(
+        mockTestRun,
+      );
 
       const result = await getTestRun("run-auth-2", "user-123");
 

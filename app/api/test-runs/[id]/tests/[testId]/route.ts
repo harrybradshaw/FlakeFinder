@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { type Database } from "@/types/supabase";
 import { type TestDetailsResponse } from "@/types/api";
+import { createRepositories } from "@/lib/repositories";
 
 export async function GET(
   request: NextRequest,
@@ -22,43 +23,20 @@ export async function GET(
       process.env.SUPABASE_ANON_KEY,
     );
 
-    // Fetch the specific test from this run with suite_test details
-    const { data: test, error: testError } = await supabase
-      .from("tests")
-      .select("*, suite_test:suite_tests(name, file)")
-      .eq("test_run_id", testRunId)
-      .eq("suite_test_id", suiteTestId)
-      .single();
+    const repos = createRepositories(supabase);
 
-    if (testError || !test) {
-      console.error("[API] Error fetching test:", testError);
+    // Fetch the specific test from this run with suite_test details
+    const test = await repos.testRuns.getTestWithSuiteDetails(
+      testRunId,
+      suiteTestId,
+    );
+
+    if (!test) {
+      console.error("[API] Test not found");
       return NextResponse.json({ error: "Test not found" }, { status: 404 });
     }
 
-    // Fetch test attempts (including retries) for this test
-    const { data: testAttempts, error: attemptsError } = await supabase
-      .from("test_results")
-      .select("*")
-      .eq("test_id", test.id)
-      .order("retry_index", { ascending: true });
-
-    if (attemptsError) {
-      console.error(
-        "[getTestDetails] Error fetching test attempts:",
-        attemptsError,
-      );
-    }
-
-    // Debug logging
-    console.log(
-      "[API] Test attempts:",
-      testAttempts?.map((a) => ({
-        id: a.id,
-        steps_url: a.steps_url,
-        hasSteps: !!a.steps_url,
-      })),
-    );
-
+    const testAttempts = await repos.testRuns.getTestResults(test.id);
     const response: TestDetailsResponse = {
       test: {
         id: test.id,

@@ -44,7 +44,7 @@ const TestStepSchema: z.ZodType<any> = z.lazy(() =>
 const TestResultSchema = z
   .object({
     workerIndex: z.number().optional(), // May be undefined in some reports
-    status: z.enum(["passed", "failed", "timedOut", "skipped"]),
+    status: z.enum(["passed", "failed", "timedOut", "skipped", "flaky"]),
     duration: z.number(),
     error: ErrorSchema.optional(),
     errors: z.array(z.string()).optional(),
@@ -102,17 +102,19 @@ export const PlaywrightReportSchema = z.object({
     .optional(),
 });
 
-// Schema for HTML report test file structure - be lenient to handle various formats
 export const HTMLReportTestFileSchema = z
   .object({
     fileId: z.string().optional(),
     fileName: z.string().optional(),
-    tests: z.array(PlaywrightTestSchema).optional(),
+    tests: z.array(PlaywrightTestSchema),
   })
-  .passthrough(); // Allow additional fields we don't know about
+  .passthrough();
 
-// Export types
+export type HTMLReportTestFile = z.infer<typeof HTMLReportTestFileSchema>;
 export type PlaywrightReport = z.infer<typeof PlaywrightReportSchema>;
 export type PlaywrightTest = z.infer<typeof PlaywrightTestSchema>;
-export type TestResult = z.infer<typeof TestResultSchema>;
+export type PlaywrightTestResult = z.infer<typeof TestResultSchema>;
 export type Annotation = z.infer<typeof AnnotationSchema>;
+export type Location = z.infer<typeof LocationSchema>;
+export type TestStep = z.infer<typeof TestStepSchema>;
+export type Attachment = z.infer<typeof AttachmentSchema>;

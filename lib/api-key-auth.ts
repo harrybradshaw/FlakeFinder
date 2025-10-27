@@ -4,6 +4,7 @@ interface AuthKeyResponse {
   valid: boolean;
   error: string;
   projectId: string;
+  suiteId: string;
 }
 
 /**
@@ -18,6 +19,7 @@ export async function authenticateApiKey(): Promise<AuthKeyResponse> {
       valid: false,
       error: "Missing Authorization header",
       projectId: "",
+      suiteId: "",
     };
   }
 
@@ -32,5 +34,6 @@ export async function authenticateApiKey(): Promise<AuthKeyResponse> {
     valid: isValid,
     error: isValid ? "" : "Invalid key",
     projectId: isValid ? "b627095d-1346-4e0a-901b-b07dd4e5e440" : "",
+    suiteId: isValid ? "c2a4f93e-9c39-4c75-b8e1-42e4cbf361a8" : "",
   };
 }

@@ -1,25 +1,54 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-// Define routes that require authentication
 const isProtectedRoute = createRouteMatcher([
   "/api/(.*)", // Protect all API routes
   "/runs/(.*)", // Protect test run pages
   "/tests/(.*)", // Protect test pages
   "/tests",
+  "/admin/(.*)", // Protect admin routes
 ]);
 
-// CI/CD routes that use API key auth instead of Clerk auth
+const isAdminRoute = createRouteMatcher(["/admin/(.*)"]);
+
 const isCIRoute = createRouteMatcher(["/api/ci-upload"]);
 
 export default clerkMiddleware(async (auth, req) => {
-  // Skip Clerk auth for CI routes (they use API key auth)
   if (isCIRoute(req)) {
     return;
   }
 
-  // Protect other API routes - require authentication
   if (isProtectedRoute(req)) {
     await auth.protect();
+  }
+
+  if (isAdminRoute(req)) {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+      throw new Error();
+    }
+
+    // FIXME: Claim on JWT.
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+    );
+
+    const { data: userOrgs } = await supabase
+      .from("user_organizations")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "owner");
+
+    if (!userOrgs || userOrgs.length === 0) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
   }
 });
 
@@ -30,4 +59,5 @@ export const config = {
     // Always run for API routes
     "/(api|trpc)(.*)",
   ],
+  runtime: "nodejs",
 };

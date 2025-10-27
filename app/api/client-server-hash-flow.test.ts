@@ -113,9 +113,13 @@ describe("Client-Server Hash Flow Integration", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    testReportFile = new File([buffer], "playwright-report-testing-466.zip", {
-      type: "application/zip",
-    });
+    testReportFile = new File(
+      [buffer as any],
+      "playwright-report-testing-466.zip",
+      {
+        type: "application/zip",
+      },
+    );
 
     // Simulate client-side hash calculation (what the browser does)
     const { tests } = await processPlaywrightReportFile(testReportFile);

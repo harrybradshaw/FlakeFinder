@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
-// GET - List all organization-project relationships for user's organizations
 export async function GET() {
   try {
     const { userId } = await auth();
@@ -26,48 +26,18 @@ export async function GET() {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
-    // Get user's custom organization memberships
-    const { data: userOrgs, error: userOrgsError } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .eq("user_id", userId);
-
-    if (userOrgsError) {
-      console.error("[API] Error fetching user organizations:", userOrgsError);
-      return NextResponse.json(
-        { error: userOrgsError.message },
-        { status: 500 },
-      );
-    }
-
-    const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
+    const userOrgIds = await repos.lookups.getUserOrganizations(userId);
 
     if (userOrgIds.length === 0) {
       return NextResponse.json({ relationships: [] });
     }
 
-    // Fetch organization-project relationships
-    const { data, error } = await supabase
-      .from("organization_projects")
-      .select(
-        `
-        *,
-        project:projects(*),
-        organization:organizations(*)
-      `,
-      )
-      .in("organization_id", userOrgIds);
+    const relationships =
+      await repos.projects.getOrganizationProjectRelationships(userOrgIds);
 
-    if (error) {
-      console.error(
-        "[API] Error fetching organization-project relationships:",
-        error,
-      );
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ relationships: data || [] });
+    return NextResponse.json({ relationships });
   } catch (error) {
     console.error(
       "[API] Error fetching organization-project relationships:",
@@ -117,23 +87,16 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
     // Insert the relationship
-    const { data, error } = await supabase
-      .from("organization_projects")
-      .insert({
+    const relationship =
+      await repos.projects.createOrganizationProjectRelationship(
         organization_id,
         project_id,
-      })
-      .select()
-      .single();
+      );
 
-    if (error) {
-      console.error("[API] Failed to create relationship:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ relationship: data });
+    return NextResponse.json({ relationship });
   } catch (error) {
     console.error("[API] Error creating relationship:", error);
     return NextResponse.json(
@@ -180,17 +143,10 @@ export async function DELETE(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
     // Delete the relationship
-    const { error } = await supabase
-      .from("organization_projects")
-      .delete()
-      .eq("id", relationshipId);
-
-    if (error) {
-      console.error("[API] Failed to delete relationship:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    await repos.projects.deleteOrganizationProjectRelationship(relationshipId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

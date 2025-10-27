@@ -3,8 +3,10 @@ import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
-// Cached function to get all active environments
+// export const dynamic = "force-static";
+
 const getActiveEnvironments = cache(async () => {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     return { environments: [], error: null };
@@ -14,18 +16,14 @@ const getActiveEnvironments = cache(async () => {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
+  const repos = createRepositories(supabase);
 
-  const { data, error } = await supabase
-    .from("environments")
-    .select("*")
-    .eq("active", true)
-    .order("name", { ascending: true });
-
-  if (error) {
+  try {
+    const environments = await repos.lookups.getActiveEnvironments();
+    return { environments, error: null };
+  } catch (error) {
     return { environments: [], error };
   }
-
-  return { environments: data || [], error: null };
 });
 
 export async function GET(_request: NextRequest) {
@@ -46,7 +44,9 @@ export async function GET(_request: NextRequest) {
 
     if (error) {
       console.error("[API] Error fetching environments:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to fetch environments";
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 
     return NextResponse.json({ environments });

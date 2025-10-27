@@ -26,6 +26,10 @@ describe("TestCaseDetails", () => {
   describe("Layout Structure Snapshots", () => {
     it("should render single failed attempt with all sections in one card", () => {
       const testCase = {
+        name: "Test Case 1",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
@@ -54,12 +58,18 @@ describe("TestCaseDetails", () => {
 
     it("should render multiple attempts with separate cards", () => {
       const testCase = {
+        name: "Test Case 2",
+        file: "test.spec.ts",
+        status: "flaky" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
             status: "failed",
             duration: 3000,
             error: "First attempt error",
+            screenshots: [],
+            steps: [],
             attachments: [
               {
                 name: "Test Configuration",
@@ -72,6 +82,8 @@ describe("TestCaseDetails", () => {
             attemptIndex: 1,
             status: "passed",
             duration: 2000,
+            screenshots: [],
+            steps: [],
             attachments: [
               {
                 name: "Test Configuration",
@@ -89,11 +101,17 @@ describe("TestCaseDetails", () => {
 
     it("should render test context section correctly", () => {
       const testCase = {
+        name: "Test Case 3",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
             status: "failed",
             duration: 5000,
+            screenshots: [],
+            steps: [],
             attachments: [
               {
                 name: "Test Configuration",
@@ -121,6 +139,10 @@ describe("TestCaseDetails", () => {
 
     it("should render error and screenshots in grid layout", () => {
       const testCase = {
+        name: "Test Case 4",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
@@ -136,6 +158,7 @@ Call log:
               "https://example.com/screenshot1.png",
               "https://example.com/screenshot2.png",
             ],
+            steps: [],
           },
         ],
       };
@@ -146,6 +169,10 @@ Call log:
 
     it("should render with execution steps", () => {
       const testCase = {
+        name: "Test Case 5",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
@@ -153,6 +180,7 @@ Call log:
             duration: 5000,
             testResultId: "test-123",
             stepsUrl: "https://example.com/steps.json",
+            screenshots: [],
             steps: [
               { title: "Navigate to page", duration: 100 },
               { title: "Click button", duration: 50 },
@@ -169,11 +197,17 @@ Call log:
   describe("Conditional Rendering", () => {
     it("should not render when no content is available", () => {
       const testCase = {
+        name: "Test Case 6",
+        file: "test.spec.ts",
+        status: "passed" as const,
+        duration: "1s",
         attempts: [
           {
             attemptIndex: 0,
             status: "passed",
             duration: 1000,
+            screenshots: [],
+            steps: [],
           },
         ],
       };
@@ -184,17 +218,25 @@ Call log:
 
     it("should skip attempts with no content", () => {
       const testCase = {
+        name: "Test Case 7",
+        file: "test.spec.ts",
+        status: "flaky" as const,
+        duration: "3s",
         attempts: [
           {
             attemptIndex: 0,
             status: "passed",
             duration: 1000,
+            screenshots: [],
+            steps: [],
           },
           {
             attemptIndex: 1,
             status: "failed",
             duration: 2000,
             error: "Test failed",
+            screenshots: [],
+            steps: [],
           },
         ],
       };
@@ -209,12 +251,18 @@ Call log:
   describe("Styling Classes", () => {
     it("should apply correct background color for failed attempts", () => {
       const testCase = {
+        name: "Test Case 8",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
             status: "failed",
             duration: 5000,
             error: "Test failed",
+            screenshots: [],
+            steps: [],
           },
         ],
       };
@@ -226,11 +274,17 @@ Call log:
 
     it("should apply correct background color for passed attempts", () => {
       const testCase = {
+        name: "Test Case 9",
+        file: "test.spec.ts",
+        status: "passed" as const,
+        duration: "1s",
         attempts: [
           {
             attemptIndex: 0,
             status: "passed",
             duration: 1000,
+            screenshots: [],
+            steps: [],
             attachments: [
               {
                 name: "Test Configuration",
@@ -249,6 +303,10 @@ Call log:
 
     it("should apply grid layout for error and screenshots section", () => {
       const testCase = {
+        name: "Test Case 10",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
@@ -256,6 +314,7 @@ Call log:
             duration: 5000,
             error: "Test error",
             screenshots: ["https://example.com/screenshot.png"],
+            steps: [],
           },
         ],
       };
@@ -270,6 +329,10 @@ Call log:
   describe("Error Message Formatting", () => {
     it("should extract error message from stack trace", () => {
       const testCase = {
+        name: "Test Case 11",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
@@ -278,6 +341,8 @@ Call log:
             error: `Error: Timed out 30000ms waiting for expect(locator).toBeVisible()
     at Timeout._onTimeout
     at listOnTimeout`,
+            screenshots: [],
+            steps: [],
           },
         ],
       };
@@ -288,6 +353,10 @@ Call log:
 
     it("should handle error with separate stack trace", () => {
       const testCase = {
+        name: "Test Case 12",
+        file: "test.spec.ts",
+        status: "failed" as const,
+        duration: "5s",
         attempts: [
           {
             attemptIndex: 0,
@@ -295,6 +364,8 @@ Call log:
             duration: 5000,
             error: "Error: Test failed",
             errorStack: "Error: Test failed\n    at line 1\n    at line 2",
+            screenshots: [],
+            steps: [],
           },
         ],
       };

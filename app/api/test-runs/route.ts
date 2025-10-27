@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
+import { type TestRun } from "@/types/api";
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,47 +34,25 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_ANON_KEY,
     );
 
-    // Get user's custom organization memberships
-    const { data: userOrgs, error: userOrgsError } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .eq("user_id", userId);
+    const { createRepositories } = await import("@/lib/repositories");
+    const repos = createRepositories(supabase);
 
-    if (userOrgsError) {
-      console.error("[API] Error fetching user organizations:", userOrgsError);
-      return NextResponse.json(
-        { error: userOrgsError.message },
-        { status: 500 },
-      );
-    }
-
-    const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
+    // Get user's organizations
+    const userOrgs = await repos.organizations.getOrganizationsForUser(userId);
+    const userOrgIds = userOrgs.map((org) => org.id);
 
     if (userOrgIds.length === 0) {
       console.log("[API] User has no organization memberships");
       return NextResponse.json({ runs: [] });
     }
 
-    // Get accessible project IDs based on user's organizations
-    const { data: orgProjects, error: orgProjectsError } = await supabase
-      .from("organization_projects")
-      .select("project_id, organization_id")
-      .in("organization_id", userOrgIds);
-
-    if (orgProjectsError) {
-      console.error(
-        "[API] Error fetching organization projects:",
-        orgProjectsError,
-      );
-      return NextResponse.json(
-        { error: orgProjectsError.message },
-        { status: 500 },
-      );
-    }
-
-    const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || [];
-
-    console.log("[API] Accessible project IDs:", accessibleProjectIds);
+    // Get accessible projects for user's organizations
+    const accessibleProjects = await Promise.all(
+      userOrgIds.map((orgId) =>
+        repos.projects.getProjectsForOrganization(orgId),
+      ),
+    );
+    const accessibleProjectIds = accessibleProjects.flat().map((p) => p.id);
 
     if (accessibleProjectIds.length === 0) {
       console.log("[API] User has no accessible projects");
@@ -100,22 +79,12 @@ export async function GET(request: NextRequest) {
         startDate.setDate(now.getDate() - 7);
     }
 
-    // Look up project/environment/trigger/suite IDs if filters are provided
-    let projectId = null;
+    // Look up environment/trigger/suite IDs if filters are provided
+    // Project is already an ID (not a name)
+    const projectId = project && project !== "all" ? project : null;
     let environmentId = null;
     let triggerId = null;
     let suiteId = null;
-
-    if (project && project !== "all") {
-      const { data: projData } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("name", project)
-        .eq("active", true)
-        .single();
-
-      if (projData) projectId = projData.id;
-    }
 
     if (environment && environment !== "all") {
       const { data: envData } = await supabase
@@ -188,7 +157,6 @@ export async function GET(request: NextRequest) {
       query = query.gte("timestamp", startDate.toISOString());
     }
 
-    let data = null;
     let error = null;
     let testRunIdsInSuite: string[] = [];
 
@@ -234,21 +202,17 @@ export async function GET(request: NextRequest) {
       ];
 
       if (testRunIdsInSuite.length === 0) {
-        // No test runs with tests in this suite
         return NextResponse.json({ runs: [], total: 0 });
       }
 
-      // Add suite filter to query
       query = query.in("id", testRunIdsInSuite);
     }
 
-    // Get count with a separate query (without joins, which don't work well with count)
     let countQuery = supabase
       .from("test_runs")
       .select("*", { count: "exact", head: true })
       .in("project_id", accessibleProjectIds);
 
-    // Apply same filters to count query
     if (projectId) {
       countQuery = countQuery.eq("project_id", projectId);
     }
@@ -266,11 +230,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { count: totalCount } = await countQuery;
-
-    // Apply pagination to main query
     const queryResult = await query.range(offset, offset + limit - 1);
 
-    data = queryResult.data;
+    const data = queryResult.data ?? [];
     error = queryResult.error;
 
     if (error) {
@@ -278,17 +240,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Transform data to match frontend format
-    const runs = (data || []).map((run: any) => ({
+    const runs: TestRun[] = data.map((run) => ({
       id: run.id,
       timestamp: run.timestamp,
       project: run.project?.name || "default",
       project_display: run.project?.display_name || "Default Project",
       project_color: run.project?.color || "#3b82f6",
       environment: run.environment?.name || "unknown",
+      environmentName: run.environment?.name || "unknown",
       environment_display: run.environment?.display_name || "Unknown",
       environment_color: run.environment?.color || "#3b82f6",
       trigger: run.trigger?.name || "unknown",
+      triggerName: run.trigger?.name || "unknown",
       trigger_display: run.trigger?.display_name || "Unknown",
       trigger_icon: run.trigger?.icon || "▶️",
       branch: run.branch,

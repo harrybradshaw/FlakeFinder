@@ -93,6 +93,7 @@ describe("POST /api/ci-upload", () => {
       valid: false,
       error: "Invalid API key",
       projectId: "",
+      suiteId: "",
     });
 
     const formData = new FormData();
@@ -118,6 +119,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "project-1",
       error: "",
+      suiteId: "",
     });
 
     const formData = new FormData();
@@ -141,6 +143,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "", // No projectId
       error: "",
+      suiteId: "",
     });
 
     const formData = new FormData();
@@ -166,6 +169,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "project-1",
       error: "",
+      suiteId: "",
     });
 
     const formData = new FormData();
@@ -192,6 +196,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "project-1",
       error: "",
+      suiteId: "",
     });
 
     const formData = new FormData();
@@ -216,6 +221,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "project-1",
       error: "",
+      suiteId: "",
     });
 
     vi.mocked(processUpload).mockResolvedValue({
@@ -253,6 +259,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "project-1",
       error: "",
+      suiteId: "",
     });
 
     const formData = new FormData();
@@ -287,6 +294,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "project-1",
       error: "",
+      suiteId: "",
     });
 
     vi.mocked(processUpload).mockResolvedValue({
@@ -321,6 +329,7 @@ describe("POST /api/ci-upload", () => {
       valid: true,
       projectId: "project-1",
       error: "",
+      suiteId: "",
     });
 
     const formData = new FormData();

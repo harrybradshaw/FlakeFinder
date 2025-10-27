@@ -127,7 +127,7 @@ export function formatTestFailure(event: TestFailureEvent): object {
               text: "View Test Details",
               emoji: true,
             },
-            url: event.testUrl,
+            url: toAbsoluteUrl(event.testUrl),
             style: "primary",
           },
           {
@@ -137,7 +137,7 @@ export function formatTestFailure(event: TestFailureEvent): object {
               text: "View Run",
               emoji: true,
             },
-            url: event.runUrl,
+            url: toAbsoluteUrl(event.runUrl),
           },
         ],
       },
@@ -228,7 +228,7 @@ export function formatFlakinessAlert(event: FlakinessAlertEvent): object {
               text: "View Test History",
               emoji: true,
             },
-            url: event.testUrl,
+            url: toAbsoluteUrl(event.testUrl),
             style: "primary",
           },
         ],
@@ -314,7 +314,7 @@ export function formatPerformanceAlert(event: PerformanceAlertEvent): object {
               text: "View Test Details",
               emoji: true,
             },
-            url: event.testUrl,
+            url: toAbsoluteUrl(event.testUrl),
             style: "primary",
           },
           {
@@ -324,7 +324,7 @@ export function formatPerformanceAlert(event: PerformanceAlertEvent): object {
               text: "View Run",
               emoji: true,
             },
-            url: event.runUrl,
+            url: toAbsoluteUrl(event.runUrl),
           },
         ],
       },
@@ -382,7 +382,7 @@ export function formatRunFailure(event: RunFailureEvent): object {
               text: "View Test Run",
               emoji: true,
             },
-            url: event.runUrl,
+            url: toAbsoluteUrl(event.runUrl),
             style: "danger",
           },
         ],
@@ -398,6 +398,25 @@ export function formatRunFailure(event: RunFailureEvent): object {
       },
     ],
   };
+}
+
+/**
+ * Helper: Convert relative URL to absolute URL
+ */
+function toAbsoluteUrl(url: string): string {
+  // If already absolute, return as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  
+  // Get base URL from environment variable
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  
+  // Remove trailing slash from base URL and ensure path starts with slash
+  const cleanBase = baseUrl.replace(/\/$/, '');
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  
+  return `${cleanBase}${cleanPath}`;
 }
 
 /**

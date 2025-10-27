@@ -361,13 +361,20 @@ export async function lookupDatabaseIds(params: {
     const projectId = suiteData.project_id;
     console.log(`${logPrefix} Using project from suite:`, projectId);
 
-    const environmentData = await lookupRepo.getEnvironmentByName(environment);
+    const environmentNameToUse =
+      environment === "preview" ? "development" : environment;
+    const environmentData =
+      await lookupRepo.getEnvironmentByName(environmentNameToUse);
+
     if (!environmentData) {
-      console.error(`${logPrefix} Environment not found:`, environment);
+      console.error(
+        `${logPrefix} Environment not found:`,
+        environmentNameToUse,
+      );
       return {
         success: false,
         error: {
-          message: `Environment '${environment}' not found. Please add it to the database first.`,
+          message: `Environment '${environmentNameToUse}' not found. Please add it to the database first.`,
           status: 400,
         },
       };

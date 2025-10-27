@@ -44,6 +44,47 @@ export type Database = {
         };
         Relationships: [];
       };
+      flakiness_alerts: {
+        Row: {
+          alert_type: string;
+          consecutive_count: number | null;
+          flake_rate: number | null;
+          id: string;
+          metadata: Json | null;
+          suite_test_id: string;
+          threshold: number | null;
+          triggered_at: string | null;
+        };
+        Insert: {
+          alert_type: string;
+          consecutive_count?: number | null;
+          flake_rate?: number | null;
+          id?: string;
+          metadata?: Json | null;
+          suite_test_id: string;
+          threshold?: number | null;
+          triggered_at?: string | null;
+        };
+        Update: {
+          alert_type?: string;
+          consecutive_count?: number | null;
+          flake_rate?: number | null;
+          id?: string;
+          metadata?: Json | null;
+          suite_test_id?: string;
+          threshold?: number | null;
+          triggered_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "flakiness_alerts_suite_test_id_fkey";
+            columns: ["suite_test_id"];
+            isOneToOne: false;
+            referencedRelation: "suite_tests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       organization_projects: {
         Row: {
           created_at: string;
@@ -109,6 +150,67 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      performance_alerts: {
+        Row: {
+          alert_type: string;
+          baseline_duration: number | null;
+          current_duration: number | null;
+          deviation_percent: number | null;
+          id: string;
+          metadata: Json | null;
+          suite_test_id: string;
+          test_id: string | null;
+          test_run_id: string | null;
+          triggered_at: string | null;
+        };
+        Insert: {
+          alert_type: string;
+          baseline_duration?: number | null;
+          current_duration?: number | null;
+          deviation_percent?: number | null;
+          id?: string;
+          metadata?: Json | null;
+          suite_test_id: string;
+          test_id?: string | null;
+          test_run_id?: string | null;
+          triggered_at?: string | null;
+        };
+        Update: {
+          alert_type?: string;
+          baseline_duration?: number | null;
+          current_duration?: number | null;
+          deviation_percent?: number | null;
+          id?: string;
+          metadata?: Json | null;
+          suite_test_id?: string;
+          test_id?: string | null;
+          test_run_id?: string | null;
+          triggered_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "performance_alerts_suite_test_id_fkey";
+            columns: ["suite_test_id"];
+            isOneToOne: false;
+            referencedRelation: "suite_tests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "performance_alerts_test_id_fkey";
+            columns: ["test_id"];
+            isOneToOne: false;
+            referencedRelation: "tests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "performance_alerts_test_run_id_fkey";
+            columns: ["test_run_id"];
+            isOneToOne: false;
+            referencedRelation: "test_runs";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       projects: {
         Row: {
@@ -226,6 +328,109 @@ export type Database = {
           },
         ];
       };
+      test_flakiness_metrics: {
+        Row: {
+          avg_duration: number | null;
+          created_at: string | null;
+          date: string;
+          failed_runs: number | null;
+          flake_rate: number | null;
+          flaky_runs: number | null;
+          id: string;
+          passed_runs: number | null;
+          suite_test_id: string;
+          total_runs: number | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          avg_duration?: number | null;
+          created_at?: string | null;
+          date: string;
+          failed_runs?: number | null;
+          flake_rate?: number | null;
+          flaky_runs?: number | null;
+          id?: string;
+          passed_runs?: number | null;
+          suite_test_id: string;
+          total_runs?: number | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          avg_duration?: number | null;
+          created_at?: string | null;
+          date?: string;
+          failed_runs?: number | null;
+          flake_rate?: number | null;
+          flaky_runs?: number | null;
+          id?: string;
+          passed_runs?: number | null;
+          suite_test_id?: string;
+          total_runs?: number | null;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "test_flakiness_metrics_suite_test_id_fkey";
+            columns: ["suite_test_id"];
+            isOneToOne: false;
+            referencedRelation: "suite_tests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      test_performance_metrics: {
+        Row: {
+          avg_duration: number | null;
+          created_at: string | null;
+          date: string;
+          id: string;
+          p50_duration: number | null;
+          p90_duration: number | null;
+          p95_duration: number | null;
+          p99_duration: number | null;
+          sample_size: number | null;
+          std_deviation: number | null;
+          suite_test_id: string;
+          updated_at: string | null;
+        };
+        Insert: {
+          avg_duration?: number | null;
+          created_at?: string | null;
+          date: string;
+          id?: string;
+          p50_duration?: number | null;
+          p90_duration?: number | null;
+          p95_duration?: number | null;
+          p99_duration?: number | null;
+          sample_size?: number | null;
+          std_deviation?: number | null;
+          suite_test_id: string;
+          updated_at?: string | null;
+        };
+        Update: {
+          avg_duration?: number | null;
+          created_at?: string | null;
+          date?: string;
+          id?: string;
+          p50_duration?: number | null;
+          p90_duration?: number | null;
+          p95_duration?: number | null;
+          p99_duration?: number | null;
+          sample_size?: number | null;
+          std_deviation?: number | null;
+          suite_test_id?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "test_performance_baselines_suite_test_id_fkey";
+            columns: ["suite_test_id"];
+            isOneToOne: false;
+            referencedRelation: "suite_tests";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       test_results: {
         Row: {
           attachments: Json | null;
@@ -298,10 +503,12 @@ export type Database = {
           passed: number;
           project_id: string;
           skipped: number;
+          suite_id: string;
           timestamp: string;
           total: number;
           trigger_id: string;
           uploaded_filename: string | null;
+          wall_clock_duration: number | null;
         };
         Insert: {
           branch: string;
@@ -318,10 +525,12 @@ export type Database = {
           passed?: number;
           project_id: string;
           skipped?: number;
+          suite_id: string;
           timestamp?: string;
           total?: number;
           trigger_id: string;
           uploaded_filename?: string | null;
+          wall_clock_duration?: number | null;
         };
         Update: {
           branch?: string;
@@ -338,10 +547,12 @@ export type Database = {
           passed?: number;
           project_id?: string;
           skipped?: number;
+          suite_id?: string;
           timestamp?: string;
           total?: number;
           trigger_id?: string;
           uploaded_filename?: string | null;
+          wall_clock_duration?: number | null;
         };
         Relationships: [
           {
@@ -356,6 +567,13 @@ export type Database = {
             columns: ["project_id"];
             isOneToOne: false;
             referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "test_runs_suite_id_fkey";
+            columns: ["suite_id"];
+            isOneToOne: false;
+            referencedRelation: "suites";
             referencedColumns: ["id"];
           },
           {
@@ -399,6 +617,7 @@ export type Database = {
       };
       tests: {
         Row: {
+          attempts: number | null;
           created_at: string;
           duration: number;
           error: string | null;
@@ -412,6 +631,7 @@ export type Database = {
           worker_index: number | null;
         };
         Insert: {
+          attempts?: number | null;
           created_at?: string;
           duration?: number;
           error?: string | null;
@@ -425,6 +645,7 @@ export type Database = {
           worker_index?: number | null;
         };
         Update: {
+          attempts?: number | null;
           created_at?: string;
           duration?: number;
           error?: string | null;
@@ -482,6 +703,158 @@ export type Database = {
             columns: ["organization_id"];
             isOneToOne: false;
             referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      webhook_configurations: {
+        Row: {
+          created_at: string | null;
+          created_by: string | null;
+          enabled: boolean | null;
+          id: string;
+          name: string;
+          organization_id: string | null;
+          project_id: string | null;
+          secret_key: string | null;
+          updated_at: string | null;
+          webhook_type: string;
+          webhook_url: string;
+        };
+        Insert: {
+          created_at?: string | null;
+          created_by?: string | null;
+          enabled?: boolean | null;
+          id?: string;
+          name: string;
+          organization_id?: string | null;
+          project_id?: string | null;
+          secret_key?: string | null;
+          updated_at?: string | null;
+          webhook_type: string;
+          webhook_url: string;
+        };
+        Update: {
+          created_at?: string | null;
+          created_by?: string | null;
+          enabled?: boolean | null;
+          id?: string;
+          name?: string;
+          organization_id?: string | null;
+          project_id?: string | null;
+          secret_key?: string | null;
+          updated_at?: string | null;
+          webhook_type?: string;
+          webhook_url?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "webhook_configurations_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "webhook_configurations_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      webhook_deliveries: {
+        Row: {
+          attempt_count: number | null;
+          created_at: string | null;
+          delivered_at: string | null;
+          error_message: string | null;
+          id: string;
+          max_attempts: number | null;
+          next_retry_at: string | null;
+          payload: Json;
+          response_body: string | null;
+          response_code: number | null;
+          status: string | null;
+          webhook_configuration_id: string | null;
+          webhook_trigger_id: string | null;
+        };
+        Insert: {
+          attempt_count?: number | null;
+          created_at?: string | null;
+          delivered_at?: string | null;
+          error_message?: string | null;
+          id?: string;
+          max_attempts?: number | null;
+          next_retry_at?: string | null;
+          payload: Json;
+          response_body?: string | null;
+          response_code?: number | null;
+          status?: string | null;
+          webhook_configuration_id?: string | null;
+          webhook_trigger_id?: string | null;
+        };
+        Update: {
+          attempt_count?: number | null;
+          created_at?: string | null;
+          delivered_at?: string | null;
+          error_message?: string | null;
+          id?: string;
+          max_attempts?: number | null;
+          next_retry_at?: string | null;
+          payload?: Json;
+          response_body?: string | null;
+          response_code?: number | null;
+          status?: string | null;
+          webhook_configuration_id?: string | null;
+          webhook_trigger_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "webhook_deliveries_webhook_configuration_id_fkey";
+            columns: ["webhook_configuration_id"];
+            isOneToOne: false;
+            referencedRelation: "webhook_configurations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "webhook_deliveries_webhook_trigger_id_fkey";
+            columns: ["webhook_trigger_id"];
+            isOneToOne: false;
+            referencedRelation: "webhook_triggers";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      webhook_triggers: {
+        Row: {
+          conditions: Json | null;
+          created_at: string | null;
+          id: string;
+          trigger_type: string;
+          webhook_id: string | null;
+        };
+        Insert: {
+          conditions?: Json | null;
+          created_at?: string | null;
+          id?: string;
+          trigger_type: string;
+          webhook_id?: string | null;
+        };
+        Update: {
+          conditions?: Json | null;
+          created_at?: string | null;
+          id?: string;
+          trigger_type?: string;
+          webhook_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "webhook_triggers_webhook_id_fkey";
+            columns: ["webhook_id"];
+            isOneToOne: false;
+            referencedRelation: "webhook_configurations";
             referencedColumns: ["id"];
           },
         ];

@@ -9,35 +9,17 @@ vi.mock("@/lib/api-key-auth", () => ({
   authenticateApiKey: vi.fn(),
 }));
 
-vi.mock("@/lib/report-optimization", () => ({
+vi.mock("@/lib/upload/report-optimization", () => ({
   optimizePlaywrightReport: vi.fn(),
 }));
 
-vi.mock("@/lib/upload-processing", () => ({
-  processScreenshots: vi.fn(),
-  processTestsFromZip: vi.fn(),
-  lookupDatabaseIds: vi.fn(),
-  checkDuplicate: vi.fn(),
-  insertTestRun: vi.fn(),
-}));
-
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => ({})),
-}));
-
-vi.mock("@/lib/zip-extraction-utils", () => ({
-  mapScreenshotPaths: vi.fn(),
+vi.mock("@/lib/upload/shared-upload-handler", () => ({
+  processUpload: vi.fn(),
 }));
 
 import { authenticateApiKey } from "@/lib/api-key-auth";
-import { optimizePlaywrightReport } from "@/lib/report-optimization";
-import {
-  processScreenshots,
-  processTestsFromZip,
-  lookupDatabaseIds,
-  checkDuplicate,
-  insertTestRun,
-} from "@/lib/upload-processing";
+import { optimizePlaywrightReport } from "@/lib/upload/report-optimization";
+import { processUpload } from "@/lib/upload/shared-upload-handler";
 
 describe("POST /api/ci-upload", () => {
   let mockFile: File;
@@ -50,9 +32,13 @@ describe("POST /api/ci-upload", () => {
       "../../../lib/__tests__/fixtures/playwright-report-sample.zip",
     );
     mockZipBuffer = readFileSync(fixturePath);
-    mockFile = new File([mockZipBuffer], "playwright-report.zip", {
-      type: "application/zip",
-    });
+    mockFile = new File(
+      [new Uint8Array(mockZipBuffer)],
+      "playwright-report.zip",
+      {
+        type: "application/zip",
+      },
+    );
 
     // Set up environment variables
     process.env.SUPABASE_URL = "https://test.supabase.co";
@@ -73,6 +59,28 @@ describe("POST /api/ci-upload", () => {
         imagesCompressed: 5,
         imageBytesSaved: 1000000,
       },
+    });
+
+    // Default successful processUpload mock
+    vi.mocked(processUpload).mockResolvedValue({
+      success: true,
+      testRunId: "run-1",
+      testRun: {
+        id: "run-1",
+        timestamp: new Date().toISOString(),
+        environment: "production",
+        trigger: "ci",
+        suite: "e2e",
+        branch: "main",
+        commit: "abc123",
+        total: 1,
+        passed: 1,
+        failed: 0,
+        flaky: 0,
+        skipped: 0,
+        duration: "1s",
+      },
+      message: "Successfully uploaded 1 tests (1 passed, 0 failed)",
     });
   });
 
@@ -160,42 +168,6 @@ describe("POST /api/ci-upload", () => {
       error: "",
     });
 
-    vi.mocked(processTestsFromZip).mockResolvedValue({
-      tests: [] as any,
-      stats: { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0 },
-      contentHash: "hash-123",
-      branch: "main",
-      environment: "production",
-      timestamp: new Date().toISOString(),
-      ciMetadata: null,
-      totalDuration: 0,
-      durationFormatted: "0s",
-    });
-
-    vi.mocked(processScreenshots).mockResolvedValue({
-      screenshotUrls: {},
-      screenshotCount: 0,
-    });
-
-    vi.mocked(lookupDatabaseIds).mockResolvedValue({
-      success: true,
-      data: {
-        projectId: "project-1",
-        environmentId: "env-1",
-        triggerId: "trigger-1",
-        suiteId: "suite-1",
-      },
-    });
-
-    vi.mocked(checkDuplicate).mockResolvedValue({
-      isDuplicate: false,
-    });
-
-    vi.mocked(insertTestRun).mockResolvedValue({
-      success: true,
-      testRunId: "run-1",
-    });
-
     const formData = new FormData();
     formData.append("file", mockFile);
     formData.append("environment", "production");
@@ -222,42 +194,6 @@ describe("POST /api/ci-upload", () => {
       error: "",
     });
 
-    vi.mocked(processTestsFromZip).mockResolvedValue({
-      tests: [] as any,
-      stats: { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0 },
-      contentHash: "hash-123",
-      branch: "main",
-      environment: "production",
-      timestamp: new Date().toISOString(),
-      ciMetadata: null,
-      totalDuration: 0,
-      durationFormatted: "0s",
-    });
-
-    vi.mocked(processScreenshots).mockResolvedValue({
-      screenshotUrls: {},
-      screenshotCount: 0,
-    });
-
-    vi.mocked(lookupDatabaseIds).mockResolvedValue({
-      success: true,
-      data: {
-        projectId: "project-1",
-        environmentId: "env-1",
-        triggerId: "trigger-1",
-        suiteId: "suite-1",
-      },
-    });
-
-    vi.mocked(checkDuplicate).mockResolvedValue({
-      isDuplicate: false,
-    });
-
-    vi.mocked(insertTestRun).mockResolvedValue({
-      success: true,
-      testRunId: "run-1",
-    });
-
     const formData = new FormData();
     formData.append("file", mockFile);
     formData.append("environment", "production");
@@ -282,39 +218,12 @@ describe("POST /api/ci-upload", () => {
       error: "",
     });
 
-    vi.mocked(processTestsFromZip).mockResolvedValue({
-      tests: [] as any,
-      stats: { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0 },
-      contentHash: "hash-123",
-      branch: "main",
-      environment: "production",
-      timestamp: new Date().toISOString(),
-      ciMetadata: null,
-      totalDuration: 0,
-      durationFormatted: "0s",
-    });
-
-    vi.mocked(processScreenshots).mockResolvedValue({
-      screenshotUrls: {},
-      screenshotCount: 0,
-    });
-
-    vi.mocked(lookupDatabaseIds).mockResolvedValue({
-      success: true,
-      data: {
-        projectId: "project-1",
-        environmentId: "env-1",
-        triggerId: "trigger-1",
-        suiteId: "suite-1",
-      },
-    });
-
-    vi.mocked(checkDuplicate).mockResolvedValue({
+    vi.mocked(processUpload).mockResolvedValue({
+      success: false,
+      error: "Duplicate upload detected",
+      message: "This exact test run was already uploaded on 2024-01-01.",
       isDuplicate: true,
-      existingRun: {
-        id: "existing-run-1",
-        timestamp: new Date().toISOString(),
-      },
+      existingRunId: "existing-run-1",
     });
 
     const formData = new FormData();
@@ -346,53 +255,6 @@ describe("POST /api/ci-upload", () => {
       error: "",
     });
 
-    const mockTests = [
-      {
-        id: "test-1",
-        name: "should pass",
-        file: "test.spec.ts",
-        status: "passed",
-        duration: 1000,
-        screenshots: [],
-      },
-    ];
-
-    vi.mocked(processTestsFromZip).mockResolvedValue({
-      tests: mockTests as any,
-      stats: { total: 1, passed: 1, failed: 0, flaky: 0, skipped: 0 },
-      contentHash: "hash-123",
-      branch: "main",
-      environment: "production",
-      timestamp: new Date().toISOString(),
-      ciMetadata: null,
-      totalDuration: 1000,
-      durationFormatted: "1s",
-    });
-
-    vi.mocked(processScreenshots).mockResolvedValue({
-      screenshotUrls: {},
-      screenshotCount: 0,
-    });
-
-    vi.mocked(lookupDatabaseIds).mockResolvedValue({
-      success: true,
-      data: {
-        projectId: "project-1",
-        environmentId: "env-1",
-        triggerId: "trigger-1",
-        suiteId: "suite-1",
-      },
-    });
-
-    vi.mocked(checkDuplicate).mockResolvedValue({
-      isDuplicate: false,
-    });
-
-    vi.mocked(insertTestRun).mockResolvedValue({
-      success: true,
-      testRunId: "run-1",
-    });
-
     const formData = new FormData();
     formData.append("file", mockFile);
     formData.append("environment", "production");
@@ -420,97 +282,17 @@ describe("POST /api/ci-upload", () => {
     expect(data.message).toContain("Successfully uploaded");
   });
 
-  it("should handle database lookup errors", async () => {
+  it("should handle upload processing errors", async () => {
     vi.mocked(authenticateApiKey).mockResolvedValue({
       valid: true,
       projectId: "project-1",
       error: "",
     });
 
-    vi.mocked(processTestsFromZip).mockResolvedValue({
-      tests: [] as any,
-      stats: { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0 },
-      contentHash: "hash-123",
-      branch: "main",
-      environment: "invalid",
-      timestamp: new Date().toISOString(),
-      ciMetadata: null,
-      totalDuration: 0,
-      durationFormatted: "0s",
-    });
-
-    vi.mocked(processScreenshots).mockResolvedValue({
-      screenshotUrls: {},
-      screenshotCount: 0,
-    });
-
-    vi.mocked(lookupDatabaseIds).mockResolvedValue({
+    vi.mocked(processUpload).mockResolvedValue({
       success: false,
-      error: {
-        message: "Environment 'invalid' not found",
-        status: 400,
-      },
-    });
-
-    const formData = new FormData();
-    formData.append("file", mockFile);
-    formData.append("environment", "invalid");
-    formData.append("trigger", "ci");
-    formData.append("suite", "e2e");
-
-    const request = new NextRequest("http://localhost:3000/api/ci-upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    const response = await POST(request);
-    const data = await response.json();
-
-    expect(response.status).toBe(400);
-    expect(data.error).toContain("Environment");
-  });
-
-  it("should handle insert errors", async () => {
-    vi.mocked(authenticateApiKey).mockResolvedValue({
-      valid: true,
-      projectId: "project-1",
-      error: "",
-    });
-
-    vi.mocked(processTestsFromZip).mockResolvedValue({
-      tests: [] as any,
-      stats: { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0 },
-      contentHash: "hash-123",
-      branch: "main",
-      environment: "production",
-      timestamp: new Date().toISOString(),
-      ciMetadata: null,
-      totalDuration: 0,
-      durationFormatted: "0s",
-    });
-
-    vi.mocked(processScreenshots).mockResolvedValue({
-      screenshotUrls: {},
-      screenshotCount: 0,
-    });
-
-    vi.mocked(lookupDatabaseIds).mockResolvedValue({
-      success: true,
-      data: {
-        projectId: "project-1",
-        environmentId: "env-1",
-        triggerId: "trigger-1",
-        suiteId: "suite-1",
-      },
-    });
-
-    vi.mocked(checkDuplicate).mockResolvedValue({
-      isDuplicate: false,
-    });
-
-    vi.mocked(insertTestRun).mockResolvedValue({
-      success: false,
-      error: "Database error",
+      error: "Failed to store test results",
+      details: "Database error",
     });
 
     const formData = new FormData();
@@ -534,51 +316,40 @@ describe("POST /api/ci-upload", () => {
     expect(data.details).toBe("Database error");
   });
 
-  it("should return warning when database is not configured", async () => {
-    delete process.env.SUPABASE_URL;
-    delete process.env.SUPABASE_ANON_KEY;
-
+  it("should call processUpload with correct parameters", async () => {
     vi.mocked(authenticateApiKey).mockResolvedValue({
       valid: true,
       projectId: "project-1",
       error: "",
     });
 
-    vi.mocked(processTestsFromZip).mockResolvedValue({
-      tests: [] as any,
-      stats: { total: 0, passed: 0, failed: 0, flaky: 0, skipped: 0 },
-      contentHash: "hash-123",
-      branch: "main",
-      environment: "production",
-      timestamp: new Date().toISOString(),
-      ciMetadata: null,
-      totalDuration: 0,
-      durationFormatted: "0s",
-    });
-
-    vi.mocked(processScreenshots).mockResolvedValue({
-      screenshotUrls: {},
-      screenshotCount: 0,
-    });
-
     const formData = new FormData();
     formData.append("file", mockFile);
     formData.append("environment", "production");
     formData.append("trigger", "ci");
-    formData.append("suite", "e2e");
-    formData.append("branch", "main");
-    formData.append("commit", "abc123");
+    formData.append("suite", "e2e-suite");
+    formData.append("branch", "feature-branch");
+    formData.append("commit", "def456");
 
     const request = new NextRequest("http://localhost:3000/api/ci-upload", {
       method: "POST",
       body: formData,
     });
 
-    const response = await POST(request);
-    const data = await response.json();
+    await POST(request);
 
-    expect(response.status).toBe(200);
-    expect(data.success).toBe(true);
-    expect(data.warning).toContain("Database not configured");
+    expect(vi.mocked(processUpload)).toHaveBeenCalledWith(
+      expect.anything(), // ZIP object
+      {
+        environment: "production",
+        trigger: "ci",
+        suite: "e2e-suite",
+        branch: "feature-branch",
+        commit: "def456",
+      },
+      "project-1",
+      "playwright-report.zip",
+      "[CI Upload]",
+    );
   });
 });

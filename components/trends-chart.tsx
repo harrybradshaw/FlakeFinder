@@ -87,9 +87,11 @@ export function TrendsChart({
       try {
         const dateStr = item.date || item.timestamp;
         // If it's already YYYY-MM-DD format, append time for proper parsing
-        const isoDate = dateStr.includes("T") ? dateStr : `${dateStr}T00:00:00Z`;
+        const isoDate = dateStr.includes("T")
+          ? dateStr
+          : `${dateStr}T00:00:00Z`;
         const dateObj = new Date(isoDate);
-        
+
         if (isNaN(dateObj.getTime())) {
           displayDate = "Invalid Date";
           fullTimestamp = dateStr;
@@ -198,7 +200,8 @@ export function TrendsChart({
                 border: "1px solid rgba(0, 0, 0, 0.1)",
                 borderRadius: "8px",
                 padding: "12px",
-                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+                boxShadow:
+                  "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
               }}
               labelStyle={{
                 color: "#000",
@@ -224,7 +227,7 @@ export function TrendsChart({
                     date: string;
                     fullTimestamp?: string;
                   };
-                  
+
                   if (viewMode === "daily") {
                     return `${label}${data.runsCount ? ` (${data.runsCount} runs)` : ""}`;
                   } else {
@@ -270,16 +273,8 @@ export function TrendsChart({
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="durationGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="#3b82f6"
-                  stopOpacity={0.3}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="#3b82f6"
-                  stopOpacity={0}
-                />
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -291,7 +286,7 @@ export function TrendsChart({
             <YAxis
               stroke="hsl(var(--muted-foreground))"
               fontSize={12}
-              label={{ value: 'min', angle: -90, position: 'insideLeft' }}
+              label={{ value: "min", angle: -90, position: "insideLeft" }}
             />
             <Tooltip
               contentStyle={{
@@ -299,7 +294,7 @@ export function TrendsChart({
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
               }}
-              formatter={(value: number) => [`${value} min`, 'Avg Duration']}
+              formatter={(value: number) => [`${value} min`, "Avg Duration"]}
             />
             <Area
               type="monotone"

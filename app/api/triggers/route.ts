@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     // Verify authentication (middleware enforces this, but good practice to check)
     const { userId } = await auth();
@@ -20,19 +21,11 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
-    const { data, error } = await supabase
-      .from("test_triggers")
-      .select("*")
-      .eq("active", true)
-      .order("name", { ascending: true });
+    const triggers = await repos.lookups.getActiveTriggers();
 
-    if (error) {
-      console.error("[API] Error fetching triggers:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ triggers: data || [] });
+    return NextResponse.json({ triggers });
   } catch (error) {
     console.error("[API] Error fetching triggers:", error);
     return NextResponse.json(

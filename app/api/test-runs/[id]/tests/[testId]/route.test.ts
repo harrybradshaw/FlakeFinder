@@ -2,18 +2,28 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { GET } from "./route";
 import { NextRequest } from "next/server";
 
-// Mock Supabase
-const mockSupabase = {
-  from: vi.fn(),
-};
+// Mock repository methods
+const mockGetTestWithSuiteDetails = vi.fn();
+const mockGetTestResults = vi.fn();
+
+vi.mock("@/lib/repositories", () => ({
+  createRepositories: vi.fn(() => ({
+    testRuns: {
+      getTestWithSuiteDetails: mockGetTestWithSuiteDetails,
+      getTestResults: mockGetTestResults,
+    },
+  })),
+}));
 
 vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => mockSupabase),
+  createClient: vi.fn(() => ({})),
 }));
 
 describe("GET /api/test-runs/[id]/tests/[testId]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTestWithSuiteDetails.mockReset();
+    mockGetTestResults.mockReset();
     process.env.SUPABASE_URL = "https://test.supabase.co";
     process.env.SUPABASE_ANON_KEY = "test-key";
   });
@@ -61,35 +71,9 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
       },
     ];
 
-    // Mock the database queries
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "tests") {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({
-                  data: mockTest,
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        };
-      } else if (table === "test_results") {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              order: vi.fn().mockResolvedValue({
-                data: mockAttempts,
-                error: null,
-              }),
-            }),
-          }),
-        };
-      }
-      return {};
-    });
+    // Mock repository methods
+    mockGetTestWithSuiteDetails.mockResolvedValue(mockTest);
+    mockGetTestResults.mockResolvedValue(mockAttempts);
 
     const request = new NextRequest(
       "http://localhost:3000/api/test-runs/run-789/tests/suite-test-456",
@@ -137,18 +121,7 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
   });
 
   it("should return 404 when test is not found", async () => {
-    mockSupabase.from.mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: null,
-              error: { message: "Not found" },
-            }),
-          }),
-        }),
-      }),
-    }));
+    mockGetTestWithSuiteDetails.mockResolvedValue(null);
 
     const request = new NextRequest(
       "http://localhost:3000/api/test-runs/run-789/tests/suite-test-456",
@@ -178,34 +151,8 @@ describe("GET /api/test-runs/[id]/tests/[testId]", () => {
       },
     };
 
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "tests") {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({
-                  data: mockTest,
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        };
-      } else if (table === "test_results") {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              order: vi.fn().mockResolvedValue({
-                data: [],
-                error: null,
-              }),
-            }),
-          }),
-        };
-      }
-      return {};
-    });
+    mockGetTestWithSuiteDetails.mockResolvedValue(mockTest);
+    mockGetTestResults.mockResolvedValue([]);
 
     const request = new NextRequest(
       "http://localhost:3000/api/test-runs/run-789/tests/suite-test-456",

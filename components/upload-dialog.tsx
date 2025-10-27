@@ -5,7 +5,16 @@ import type React from "react";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import useSWRImmutable from "swr/immutable";
-import { calculateContentHash } from "@/lib/playwright-report-utils";
+import { extractMetadataFromZip } from "@/lib/upload/metadata-extraction";
+import { optimizePlaywrightReportBrowser } from "@/lib/upload/report-optimization.browser";
+import type {
+  Environment,
+  EnvironmentsResponse,
+  Trigger,
+  TriggersResponse,
+  Suite,
+  SuitesResponse,
+} from "@/types/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle2, Upload, XCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { uploadZipFormDataFields } from "@/lib/upload/upload-constants";
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -37,9 +47,9 @@ const fetcher = async (url: string) => {
 export function UploadDialog() {
   const { mutate } = useSWRConfig();
   const [open, setOpen] = useState(false);
-  const [environment, setEnvironment] = useState("");
-  const [trigger, setTrigger] = useState("");
-  const [suite, setSuite] = useState("");
+  const [environmentName, setEnvironmentName] = useState("");
+  const [triggerName, setTriggerName] = useState("");
+  const [suiteId, setSuiteId] = useState("");
   const [branch, setBranch] = useState("");
   const [commit, setCommit] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -60,338 +70,102 @@ export function UploadDialog() {
   const [optimizing, setOptimizing] = useState(false);
   const [calculatedHash, setCalculatedHash] = useState<string | null>(null);
 
-  // Fetch environments, triggers, and suites dynamically
-  const { data: environmentsData } = useSWRImmutable(
+  const { data: environmentsData } = useSWRImmutable<EnvironmentsResponse>(
     "/api/environments",
     fetcher,
   );
-  const { data: triggersData } = useSWRImmutable("/api/triggers", fetcher);
-  const { data: suitesData } = useSWRImmutable("/api/suites", fetcher);
+  const { data: triggersData } = useSWRImmutable<TriggersResponse>(
+    "/api/triggers",
+    fetcher,
+  );
+  const { data: suitesData } = useSWRImmutable<SuitesResponse>(
+    "/api/suites",
+    fetcher,
+  );
 
-  const environments = environmentsData?.environments || [];
-  const triggers = triggersData?.triggers || [];
-  const suites = suitesData?.suites || [];
+  const environments: Environment[] = environmentsData?.environments || [];
+  const triggers: Trigger[] = triggersData?.triggers || [];
+  const suites: Suite[] = suitesData?.suites || [];
 
-  const compressImage = async (
-    imageData: Uint8Array,
-    filename: string,
-  ): Promise<Uint8Array> => {
-    try {
-      // Convert to blob
-      const blob = new Blob([imageData], { type: "image/png" });
-
-      // Create image element
-      const img = new Image();
-      const imageUrl = URL.createObjectURL(blob);
-
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = imageUrl;
-      });
-
-      // Create canvas and compress
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return imageData;
-
-      ctx.drawImage(img, 0, 0);
-      URL.revokeObjectURL(imageUrl);
-
-      // Convert to JPEG with 80% quality (much smaller than PNG)
-      const compressedBlob = await new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.8);
-      });
-
-      return new Uint8Array(await compressedBlob.arrayBuffer());
-    } catch {
-      console.warn(`[Optimize] Failed to compress ${filename}, using original`);
-      return imageData;
-    }
+  const appendCommonMetadata = (formData: FormData) => {
+    formData.append(uploadZipFormDataFields.environmentName, environmentName);
+    formData.append(uploadZipFormDataFields.triggerName, triggerName);
+    formData.append(uploadZipFormDataFields.branch, branch);
+    formData.append(uploadZipFormDataFields.commit, commit || "");
   };
 
-  const optimizeZip = async (zip: any): Promise<Blob> => {
-    // Create a new ZIP with only essential files
-    const JSZip = (await import("jszip")).default;
-    const optimizedZip = new JSZip();
+  const checkForDuplicates = async (suiteIdToCheck: string) => {
+    if (!calculatedHash || !environmentName || !triggerName || !branch) {
+      return;
+    }
 
-    // Patterns to exclude (large files we don't use)
-    const excludePatterns = [
-      /data\/.*\.zip$/, // All ZIPs in data folder (traces, etc.)
-      /data\/trace\//, // Entire trace directory
-      /\.trace$/, // Raw trace files
-      /video\.webm$/, // Videos (we only use screenshots)
-      /\.har$/, // HAR files (network logs)
-      /\.network$/, // Network logs
-    ];
-
-    for (const [path, file] of Object.entries(zip.files)) {
-      const zipFile = file as any;
-      if (zipFile.dir) {
-        optimizedZip.folder(path);
-        continue;
+    setCheckingDuplicate(true);
+    try {
+      const formData = new FormData();
+      formData.append("contentHash", calculatedHash);
+      appendCommonMetadata(formData);
+      if (suiteIdToCheck) {
+        formData.append("suite", suiteIdToCheck);
       }
 
-      const shouldExclude = excludePatterns.some((pattern) =>
-        pattern.test(path),
-      );
+      const response = await fetch("/api/check-duplicate", {
+        method: "POST",
+        body: formData,
+      });
 
-      if (shouldExclude) {
-        console.log(`[Optimize] Removing: ${path}`);
-      } else {
-        const content = await zipFile.async("uint8array");
-
-        // Compress PNG screenshots to JPEG
-        if (
-          path.endsWith(".png") &&
-          (path.includes("screenshot") || path.includes("data/"))
-        ) {
-          const compressed = await compressImage(content, path);
-          // Change extension to .jpg
-          const newPath = path.replace(/\.png$/, ".jpg");
-          optimizedZip.file(newPath, compressed);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.hasDuplicates && data.existingRun) {
+          setIsDuplicate(true);
+          setDuplicateInfo({
+            timestamp: data.existingRun.timestamp,
+            id: data.existingRun.id,
+          });
         } else {
-          optimizedZip.file(path, content);
+          setIsDuplicate(false);
+          setDuplicateInfo(null);
         }
       }
+    } catch (error) {
+      console.error("[Duplicate Check] Failed:", error);
+    } finally {
+      setCheckingDuplicate(false);
     }
-
-    return await optimizedZip.generateAsync({ type: "blob" });
   };
 
-  const extractMetadataFromZip = async (file: File) => {
+  const handleSuiteChange = (newSuiteId: string) => {
+    setSuiteId(newSuiteId);
+    if (newSuiteId && calculatedHash && step === 2) {
+      void checkForDuplicates(newSuiteId);
+    }
+  };
+
+  const handleMetadataExtraction = async (file: File) => {
     try {
       setAutoDetecting(true);
-      const JSZip = (await import("jszip")).default;
-      const zip = await JSZip.loadAsync(file);
+      const result = await extractMetadataFromZip({
+        file,
+        environments,
+        triggers,
+        currentEnvironment: environmentName,
+        currentTrigger: triggerName,
+        currentCommit: commit,
+      });
 
-      // Extract info from filename
-      const filename = file.name.toLowerCase();
+      if (result.success) {
+        if (result.detectedEnvironment)
+          setEnvironmentName(result.detectedEnvironment);
+        if (result.detectedTrigger) setTriggerName(result.detectedTrigger);
+        if (result.detectedBranch) setBranch(result.detectedBranch);
+        if (result.detectedCommit) setCommit(result.detectedCommit);
+        if (result.contentHash) setCalculatedHash(result.contentHash);
 
-      // Detect environment from filename by checking against database values
-      let detectedEnvironment = environment;
-      if (!detectedEnvironment && environments.length > 0) {
-        for (const env of environments) {
-          const envName = env.name.toLowerCase();
-          // Check if filename contains environment name or common variations
-          if (
-            filename.includes(envName) ||
-            (envName === "production" && filename.includes("prod")) ||
-            (envName === "staging" && filename.includes("stage")) ||
-            (envName === "development" &&
-              (filename.includes("dev") || filename.includes("preview")))
-          ) {
-            detectedEnvironment = env.name;
-            console.log(
-              `[Auto-detect] Detected environment from filename: ${env.name}`,
-            );
-            break;
-          }
-        }
-      }
+        // Move to step 2 after successful detection
+        setTimeout(() => {
+          setStep(2);
+        }, 100);
 
-      // Detect trigger from filename by checking against database values
-      let detectedTrigger = trigger;
-      if (!detectedTrigger && triggers.length > 0) {
-        for (const trig of triggers) {
-          const trigName = trig.name.toLowerCase();
-          // Check if filename contains trigger name with common variations
-          if (
-            filename.includes(trigName) ||
-            filename.includes(trigName.replace("_", "-")) ||
-            (trigName === "pull_request" && filename.includes("pr"))
-          ) {
-            detectedTrigger = trig.name;
-            break;
-          }
-        }
-        // Default to merge_queue if no match found
-        if (!detectedTrigger) {
-          const mergeQueueTrigger = triggers.find(
-            (t: any) => t.name === "merge_queue",
-          );
-          if (mergeQueueTrigger) {
-            detectedTrigger = mergeQueueTrigger.name;
-          }
-        }
-      }
-
-      // Check for HTML report
-      const htmlFile = zip.file("index.html");
-      if (htmlFile) {
-        const htmlContent = await htmlFile.async("string");
-        const match = htmlContent.match(
-          /window\.playwrightReportBase64 = "([^"]+)"/,
-        );
-        if (match) {
-          const dataUri = match[1];
-          const base64Data = dataUri.replace(
-            "data:application/zip;base64,",
-            "",
-          );
-
-          // Decode base64 in browser
-          const binaryString = atob(base64Data);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-
-          const embeddedZip = await JSZip.loadAsync(bytes);
-          const reportFile = embeddedZip.file("report.json");
-
-          if (reportFile) {
-            const reportContent = await reportFile.async("string");
-            const reportData = JSON.parse(reportContent);
-            // Extract metadata
-            const metadata = reportData.metadata?.ci || {};
-
-            // Auto-fill commit if available
-            if (metadata.commitHash && !commit) {
-              setCommit(metadata.commitHash);
-            }
-
-            // Extract branch from CI metadata (prefer CI env vars over URL parsing)
-            let detectedBranch =
-              metadata.GITHUB_HEAD_REF || // GitHub PR branch
-              metadata.GITHUB_REF_NAME || // GitHub branch/tag name
-              metadata.BRANCH ||
-              metadata.GIT_BRANCH ||
-              metadata.CI_COMMIT_BRANCH ||
-              null;
-
-            // If we have PR metadata but no branch, extract from PR title
-            if (!detectedBranch && metadata.prTitle) {
-              // Try to extract ticket/issue key from PR title (e.g., "WS-2938: Fix something" -> "WS-2938")
-              const ticketMatch = metadata.prTitle.match(/^([A-Z]+-\d+)/);
-              if (ticketMatch) {
-                detectedBranch = ticketMatch[1];
-              } else {
-                // If no ticket pattern, use PR number from URL
-                const prMatch = metadata.prHref?.match(/\/pull\/(\d+)$/);
-                if (prMatch) {
-                  detectedBranch = `pr-${prMatch[1]}`;
-                }
-              }
-            }
-
-            // Fallback: try to extract from commit URL if CI metadata didn't have it
-            if (!detectedBranch && metadata.commitHref) {
-              const branchMatch = metadata.commitHref.match(/\/tree\/([^/]+)/);
-              if (branchMatch) {
-                detectedBranch = branchMatch[1];
-              }
-            }
-
-            // Final fallback to "main" if nothing found
-            if (!detectedBranch) {
-              detectedBranch = "main";
-            }
-
-            setBranch(detectedBranch);
-
-            // Try to infer environment from branch name if not detected from filename
-            if (!detectedEnvironment && detectedBranch) {
-              const branchName = detectedBranch.toLowerCase();
-              if (
-                branchName.includes("prod") ||
-                branchName === "main" ||
-                branchName === "master"
-              ) {
-                detectedEnvironment = "production";
-              } else if (
-                branchName.includes("staging") ||
-                branchName.includes("stage")
-              ) {
-                detectedEnvironment = "staging";
-              } else {
-                detectedEnvironment = "development";
-              }
-            }
-
-            // Try to infer trigger from URL patterns if not detected from filename
-            if (!detectedTrigger && metadata.buildHref) {
-              if (metadata.buildHref.includes("pull_request")) {
-                detectedTrigger = "pull_request";
-              } else if (metadata.buildHref.includes("workflow_dispatch")) {
-                detectedTrigger = "ci";
-              } else {
-                detectedTrigger = "merge_queue";
-              }
-            } else if (!detectedTrigger) {
-              detectedTrigger = "merge_queue";
-            }
-
-            // Set detected values
-            if (detectedEnvironment) setEnvironment(detectedEnvironment);
-            if (detectedTrigger) setTrigger(detectedTrigger);
-
-            setCheckingDuplicate(true);
-            try {
-              // Process the report data to extract tests in the same format as the backend
-              const { processPlaywrightReportFile } = await import(
-                "@/lib/playwright-report-utils"
-              );
-              const { tests } = await processPlaywrightReportFile(file);
-              const contentHash = await calculateContentHash(tests);
-
-              console.log("[Duplicate Check] Calculated hash:", contentHash);
-
-              // Store hash for later use in upload
-              setCalculatedHash(contentHash);
-
-              const formData = new FormData();
-              formData.append("contentHash", contentHash);
-              formData.append(
-                "environment",
-                detectedEnvironment || environment,
-              );
-              formData.append("trigger", detectedTrigger || trigger);
-              formData.append("branch", detectedBranch || branch || "main");
-              formData.append(
-                "commit",
-                commit || metadata.commitHash || "unknown",
-              );
-
-              const response = await fetch("/api/check-duplicate", {
-                method: "POST",
-                body: formData,
-              });
-
-              if (response.ok) {
-                const data = await response.json();
-                if (data.hasDuplicates && data.existingRun) {
-                  setIsDuplicate(true);
-                  setDuplicateInfo({
-                    timestamp: data.existingRun.timestamp,
-                    id: data.existingRun.id,
-                  });
-                  console.log(
-                    "[Duplicate Check] Duplicate detected, showing warning",
-                  );
-                } else {
-                  setIsDuplicate(false);
-                  setDuplicateInfo(null);
-                  console.log("[Duplicate Check] No duplicate found");
-                }
-              }
-            } catch (error) {
-              console.error("[Duplicate Check] Failed:", error);
-            } finally {
-              setCheckingDuplicate(false);
-            }
-
-            // Move to step 2 after successful detection
-            setTimeout(() => {
-              setStep(2);
-            }, 100);
-
-            return { success: true, metadata };
-          }
-        }
+        return result;
       }
     } catch (error) {
       console.error("Failed to extract metadata:", error);
@@ -411,7 +185,7 @@ export function UploadDialog() {
 
       // Try to auto-detect metadata from ZIP
       if (uploadType === "zip" && selectedFile.name.endsWith(".zip")) {
-        await extractMetadataFromZip(selectedFile);
+        await handleMetadataExtraction(selectedFile);
       } else if (uploadType === "json") {
         // For JSON, extract from filename and use defaults
         const filename = selectedFile.name.toLowerCase();
@@ -434,14 +208,12 @@ export function UploadDialog() {
         }
         // Default to development if no match
         if (!detectedEnvironment) {
-          const devEnv = environments.find(
-            (e: any) => e.name === "development",
-          );
+          const devEnv = environments.find((e) => e.name === "development");
           detectedEnvironment = devEnv
             ? devEnv.name
             : environments[0]?.name || "development";
         }
-        setEnvironment(detectedEnvironment);
+        setEnvironmentName(detectedEnvironment);
 
         // Detect trigger from filename by checking against database values
         let detectedTrigger = null;
@@ -461,13 +233,13 @@ export function UploadDialog() {
         // Default to merge_queue if no match
         if (!detectedTrigger) {
           const mergeQueueTrigger = triggers.find(
-            (t: any) => t.name === "merge_queue",
+            (t) => t.name === "merge_queue",
           );
           detectedTrigger = mergeQueueTrigger
             ? mergeQueueTrigger.name
             : triggers[0]?.name || "merge_queue";
         }
-        setTrigger(detectedTrigger);
+        setTriggerName(detectedTrigger);
 
         setBranch("main");
         setTimeout(() => {
@@ -478,7 +250,7 @@ export function UploadDialog() {
   };
 
   const handleUpload = async () => {
-    if (!file || !environment || !trigger || !branch) {
+    if (!file || !environmentName || !triggerName || !branch) {
       setResult({
         success: false,
         message: "Please fill in all required fields",
@@ -500,8 +272,8 @@ export function UploadDialog() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            environment,
-            trigger,
+            environment: environmentName,
+            trigger: triggerName,
             branch,
             commit,
             results,
@@ -530,20 +302,19 @@ export function UploadDialog() {
 
         const JSZip = (await import("jszip")).default;
         const zip = await JSZip.loadAsync(file);
-        const optimizedBlob = await optimizeZip(zip);
+        const optimizedBlob = await optimizePlaywrightReportBrowser(zip, {
+          verbose: true,
+        });
         setOptimizing(false);
 
         const formData = new FormData();
-        formData.append("file", optimizedBlob, file.name);
-        formData.append("environment", environment);
-        formData.append("trigger", trigger);
-        formData.append("suite", suite);
-        formData.append("branch", branch);
-        formData.append("commit", commit || "");
+        formData.append(uploadZipFormDataFields.file, optimizedBlob, file.name);
+        appendCommonMetadata(formData);
+        formData.append(uploadZipFormDataFields.suiteId, suiteId);
 
         // Send pre-calculated hash if available
         if (calculatedHash) {
-          formData.append("contentHash", calculatedHash);
+          formData.append(uploadZipFormDataFields.contentHash, calculatedHash);
         }
 
         const response = await fetch("/api/upload-zip", {
@@ -592,9 +363,9 @@ export function UploadDialog() {
   const resetForm = () => {
     setTimeout(() => {
       setOpen(false);
-      setEnvironment("");
-      setTrigger("");
-      setSuite("");
+      setEnvironmentName("");
+      setTriggerName("");
+      setSuiteId("");
       setBranch("");
       setCommit("");
       setFile(null);
@@ -608,9 +379,9 @@ export function UploadDialog() {
   const handleBack = () => {
     setStep(1);
     setFile(null);
-    setEnvironment("");
-    setTrigger("");
-    setSuite("");
+    setEnvironmentName("");
+    setTriggerName("");
+    setSuiteId("");
     setBranch("");
     setCommit("");
     setResult(null);
@@ -767,12 +538,15 @@ export function UploadDialog() {
                 <Label htmlFor="environment">
                   Environment <span className="text-destructive">*</span>
                 </Label>
-                <Select value={environment} onValueChange={setEnvironment}>
+                <Select
+                  value={environmentName}
+                  onValueChange={setEnvironmentName}
+                >
                   <SelectTrigger id="environment">
                     <SelectValue placeholder="Select environment" />
                   </SelectTrigger>
                   <SelectContent>
-                    {environments.map((env: any) => (
+                    {environments.map((env) => (
                       <SelectItem key={env.id} value={env.name}>
                         {env.display_name}
                       </SelectItem>
@@ -785,12 +559,12 @@ export function UploadDialog() {
                 <Label htmlFor="trigger">
                   Trigger <span className="text-destructive">*</span>
                 </Label>
-                <Select value={trigger} onValueChange={setTrigger}>
+                <Select value={triggerName} onValueChange={setTriggerName}>
                   <SelectTrigger id="trigger">
                     <SelectValue placeholder="Select trigger" />
                   </SelectTrigger>
                   <SelectContent>
-                    {triggers.map((trig: any) => (
+                    {triggers.map((trig) => (
                       <SelectItem key={trig.id} value={trig.name}>
                         {trig.icon} {trig.display_name}
                       </SelectItem>
@@ -803,14 +577,28 @@ export function UploadDialog() {
                 <Label htmlFor="suite">
                   Suite <span className="text-destructive">*</span>
                 </Label>
-                <Select value={suite} onValueChange={setSuite}>
+                <Select value={suiteId} onValueChange={handleSuiteChange}>
                   <SelectTrigger id="suite">
                     <SelectValue placeholder="Select suite" />
                   </SelectTrigger>
                   <SelectContent>
-                    {suites.map((s: any) => (
-                      <SelectItem key={s.id} value={s.name}>
-                        {s.name}
+                    {suites.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <div className="flex items-center gap-2">
+                          {s.project && (
+                            <>
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: s.project.color }}
+                              />
+                              <span className="text-muted-foreground text-xs">
+                                {s.project.display_name}
+                              </span>
+                              <span className="text-muted-foreground">·</span>
+                            </>
+                          )}
+                          <span>{s.name}</span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -878,9 +666,9 @@ export function UploadDialog() {
                 uploading ||
                 optimizing ||
                 !file ||
-                !environment ||
-                !trigger ||
-                !suite ||
+                !environmentName ||
+                !triggerName ||
+                !suiteId ||
                 !branch ||
                 isDuplicate ||
                 checkingDuplicate

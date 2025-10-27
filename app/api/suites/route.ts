@@ -1,8 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
 export async function GET(request: NextRequest) {
   try {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return NextResponse.json({ suites: [] });
+    }
+
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       console.log("[API] Supabase not configured");
       return NextResponse.json({ suites: [] });
@@ -13,30 +21,34 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
+
+    // Get user's organizations
+    const organizationIds = await repos.lookups.getUserOrganizations(userId);
+
+    if (organizationIds.length === 0) {
+      return NextResponse.json({ suites: [] });
+    }
+
+    // Get projects accessible to user's organizations
+    const accessibleProjectIds =
+      await repos.lookups.getAccessibleProjectIds(organizationIds);
+
+    if (accessibleProjectIds.length === 0) {
+      return NextResponse.json({ suites: [] });
+    }
 
     // Get project_id from query params if provided
     const searchParams = request.nextUrl.searchParams;
     const projectId = searchParams.get("project_id");
 
-    let query = supabase
-      .from("suites")
-      .select("id, name, description, project_id")
-      .eq("active", true)
-      .order("name", { ascending: true });
+    // Get suites for accessible projects
+    const suites = await repos.lookups.getSuitesForProjects(
+      accessibleProjectIds,
+      projectId,
+    );
 
-    // Filter by project if specified
-    if (projectId) {
-      query = query.eq("project_id", projectId);
-    }
-
-    const { data: suites, error } = await query;
-
-    if (error) {
-      console.error("[API] Error fetching suites:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ suites: suites || [] });
+    return NextResponse.json({ suites });
   } catch (error) {
     console.error("[API] Error in suites API:", error);
     return NextResponse.json(
@@ -60,6 +72,7 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
     const body = await request.json();
     const { name, description, project_id } = body;
@@ -72,20 +85,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert new suite
-    const { data: suite, error } = await supabase
-      .from("suites")
-      .insert({
-        name,
-        description: description || null,
-        project_id,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("[API] Error creating suite:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    const suite = await repos.lookups.createSuite({
+      name,
+      description: description || null,
+      project_id,
+    });
 
     return NextResponse.json({ suite });
   } catch (error) {

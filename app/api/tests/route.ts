@@ -1,17 +1,27 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import {
   aggregateTestMetrics,
   transformTestMetrics,
   sortTestsByHealth,
 } from "@/lib/test-aggregation-utils";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
 export async function GET(request: NextRequest) {
   try {
+    // Authenticate user
+    const { userId } = await auth();
+
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const environment = searchParams.get("environment");
     const trigger = searchParams.get("trigger");
     const timeRange = searchParams.get("timeRange") || "30d";
+    const projectFilter = searchParams.get("project");
 
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       console.log("[API] Supabase not configured, returning empty array");
@@ -23,6 +33,34 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
+
+    // Get user's organizations
+    const organizationIds = await repos.lookups.getUserOrganizations(userId);
+
+    if (organizationIds.length === 0) {
+      return NextResponse.json({ tests: [] });
+    }
+
+    // Get projects accessible to user's organizations
+    const accessibleProjectIds =
+      await repos.lookups.getAccessibleProjectIds(organizationIds);
+
+    if (accessibleProjectIds.length === 0) {
+      return NextResponse.json({ tests: [] });
+    }
+
+    // Apply project filter if specified
+    let filteredProjectIds = accessibleProjectIds;
+    if (projectFilter && projectFilter !== "all") {
+      // Only include the selected project if user has access to it
+      if (accessibleProjectIds.includes(projectFilter)) {
+        filteredProjectIds = [projectFilter];
+      } else {
+        // User doesn't have access to this project
+        return NextResponse.json({ tests: [] });
+      }
+    }
 
     // Calculate time range
     const now = new Date();
@@ -42,77 +80,35 @@ export async function GET(request: NextRequest) {
     }
 
     // Look up environment/trigger IDs if filters are provided
-    let environmentId = null;
-    let triggerId = null;
+    let environmentId: string | null = null;
+    let triggerId: string | null = null;
 
     if (environment && environment !== "all") {
-      const { data: envData } = await supabase
-        .from("environments")
-        .select("id")
-        .eq("name", environment)
-        .eq("active", true)
-        .single();
-
+      const envData = await repos.lookups.getEnvironmentByName(environment);
       if (envData) environmentId = envData.id;
     }
 
     if (trigger && trigger !== "all") {
-      const { data: trigData } = await supabase
-        .from("test_triggers")
-        .select("id")
-        .eq("name", trigger)
-        .eq("active", true)
-        .single();
-
+      const trigData = await repos.lookups.getTriggerByName(trigger);
       if (trigData) triggerId = trigData.id;
     }
 
-    // Build query for test_runs with filters
-    let runsQuery = supabase
-      .from("test_runs")
-      .select("id")
-      .gte("timestamp", startDate.toISOString());
+    // Get test runs with filters (including project filter)
+    const runs = await repos.testRuns.getTestRunsByProjects(
+      filteredProjectIds,
+      startDate,
+      environmentId,
+      triggerId,
+    );
 
-    if (environmentId) {
-      runsQuery = runsQuery.eq("environment_id", environmentId);
-    }
-    if (triggerId) {
-      runsQuery = runsQuery.eq("trigger_id", triggerId);
-    }
-
-    const { data: runs, error: runsError } = await runsQuery;
-
-    if (runsError) {
-      console.error("[API] Error fetching test runs:", runsError);
-      return NextResponse.json({ error: runsError.message }, { status: 500 });
-    }
-
-    if (!runs || runs.length === 0) {
+    if (runs.length === 0) {
       return NextResponse.json({ tests: [] });
     }
 
     const runIds = runs.map((r) => r.id);
 
     // Fetch all test executions for these runs with suite_test information
-    const { data: tests, error: testsError } = await supabase
-      .from("tests")
-      .select(
-        `
-        suite_test_id,
-        status,
-        duration,
-        test_run_id,
-        started_at,
-        suite_test:suite_tests(id, name, file)
-      `,
-      )
-      .in("test_run_id", runIds)
-      .order("started_at", { ascending: false });
-
-    if (testsError) {
-      console.error("[API] Error fetching tests:", testsError);
-      return NextResponse.json({ error: testsError.message }, { status: 500 });
-    }
+    const tests = await repos.testRuns.getTestsForAggregation(runIds);
 
     // Aggregate metrics by suite_test_id (canonical test identifier)
     const testMetrics = aggregateTestMetrics(

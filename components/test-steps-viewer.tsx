@@ -17,8 +17,8 @@ import { Button } from "@/components/ui/button";
 import stripAnsi from "strip-ansi";
 
 interface TestStepsViewerProps {
-  steps?: TestStep[]; // Inline steps (already loaded)
-  stepsUrl?: string; // URL to lazy load steps from storage
+  steps?: TestStep[];
+  stepsUrl?: string;
   testResultId?: string;
 }
 
@@ -33,9 +33,8 @@ export function TestStepsViewer({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [stepsNotFound, setStepsNotFound] = useState(false);
 
-  // Lazy load steps when modal opens
   const loadSteps = async () => {
-    if (steps || isLoading) return; // Already loaded or loading
+    if (steps || isLoading) return;
 
     setIsLoading(true);
     setError(null);
@@ -50,8 +49,6 @@ export function TestStepsViewer({
       }
 
       const response = await fetch(url);
-
-      // If 404, treat as no steps available
       if (response.status === 404) {
         setSteps([]);
         setStepsNotFound(true);
@@ -76,15 +73,13 @@ export function TestStepsViewer({
     }
   };
 
-  // Handle card click
   const handleCardClick = () => {
     setIsModalOpen(true);
     if (!steps && (stepsUrl || testResultId)) {
-      loadSteps();
+      void loadSteps();
     }
   };
 
-  // Calculate summary stats
   const getStepsSummary = () => {
     if (!steps) return null;
     const totalSteps = countSteps(steps);
@@ -94,18 +89,12 @@ export function TestStepsViewer({
 
   const summary = getStepsSummary();
 
-  // Disable the card if:
-  // 1. Inline steps provided but empty
-  // 2. We've tried loading and confirmed steps don't exist
-  // 3. testResultId exists but no stepsUrl (means steps don't exist in storage)
-  // 4. No way to load steps at all
   const isDisabled =
     (initialSteps !== undefined && initialSteps.length === 0) ||
     stepsNotFound ||
     (testResultId && !stepsUrl && !initialSteps) ||
     (!initialSteps && !stepsUrl && !testResultId);
 
-  // If steps are inline (already loaded), show them in compact card
   return (
     <>
       {/* Summary Card */}
@@ -241,7 +230,6 @@ export function TestStepsViewer({
   );
 }
 
-// Helper functions to count steps
 function countSteps(steps: TestStep[]): number {
   let count = 0;
   for (const step of steps) {

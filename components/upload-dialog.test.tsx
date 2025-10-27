@@ -85,7 +85,7 @@ describe.skip("UploadDialog - Duplicate Detection", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    const file = new File([buffer], "test-report.zip", {
+    const file = new File([buffer as any], "test-report.zip", {
       type: "application/zip",
     });
 
@@ -147,7 +147,7 @@ describe.skip("UploadDialog - Duplicate Detection", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    const file = new File([buffer], "test-report.zip", {
+    const file = new File([buffer as any], "test-report.zip", {
       type: "application/zip",
     });
 
@@ -202,7 +202,7 @@ describe.skip("UploadDialog - Duplicate Detection", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    const file = new File([buffer], "test-report.zip", {
+    const file = new File([buffer as any], "test-report.zip", {
       type: "application/zip",
     });
 
@@ -266,7 +266,7 @@ describe.skip("UploadDialog - Duplicate Detection", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    const file = new File([buffer], "test-report.zip", {
+    const file = new File([buffer as any], "test-report.zip", {
       type: "application/zip",
     });
 
@@ -329,7 +329,7 @@ describe.skip("UploadDialog - Duplicate Detection", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    const file = new File([buffer], "test-report.zip", {
+    const file = new File([buffer as any], "test-report.zip", {
       type: "application/zip",
     });
 

@@ -32,7 +32,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import type { TestRun } from "@/lib/mock-data";
+import type { TestInRun, TestRunDetails } from "@/types/api";
 import { TimelineView } from "@/components/timeline-view";
 import { TestCaseDetails } from "@/components/test-case-details";
 
@@ -48,8 +48,8 @@ interface TestAttempt {
 }
 
 interface TestCase {
-  id?: string; // UUID - primary key from tests table (this specific execution instance)
-  suite_test_id?: string; // UUID - foreign key to suite_tests table (the canonical test definition)
+  id: string;
+  suite_test_id?: string;
   name: string;
   file: string;
   status: "passed" | "failed" | "flaky" | "skipped";
@@ -65,16 +65,14 @@ interface TestCase {
     description?: string;
     descriptionHtml?: string;
   };
-  // Unified attempts structure
   attempts: TestAttempt[];
-  // Raw data for timeline
   worker_index?: number | null;
   started_at?: string | null;
   durationMs?: number;
 }
 
 interface TestDetailsViewProps {
-  testRun: TestRun;
+  testRun: TestRunDetails;
 }
 
 function formatDuration(ms: number): string {
@@ -83,15 +81,12 @@ function formatDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-// Generate a consistent color for a given string
 function getColorForEpic(epic: string): string {
-  // Simple hash function
   let hash = 0;
   for (let i = 0; i < epic.length; i++) {
     hash = epic.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  // Define a palette of distinct, visually appealing colors
   const colors = [
     "bg-purple-500 hover:bg-purple-600",
     "bg-blue-500 hover:bg-blue-600",
@@ -105,7 +100,6 @@ function getColorForEpic(epic: string): string {
     "bg-cyan-500 hover:bg-cyan-600",
   ];
 
-  // Use hash to select a color consistently
   const index = Math.abs(hash) % colors.length;
   return colors[index];
 }
@@ -122,10 +116,8 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
     testIdFromUrl,
   );
 
-  // Update expanded test when URL param changes
   useEffect(() => {
     if (testIdFromUrl) {
-      // Scroll to the test after a short delay to ensure accordion is rendered
       setTimeout(() => {
         const element = document.getElementById(`test-${testIdFromUrl}`);
         if (element) {
@@ -135,44 +127,9 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
     }
   }, [testIdFromUrl]);
 
-  // Filter and sort tests
   const [testCases, allTestCases] = useMemo(() => {
     const allTestCases: TestCase[] =
-      testRun.tests?.map((test) => {
-        // Convert to unified attempts structure
-        let attempts: TestAttempt[] = [];
-
-        if (test.attempts) {
-          // New format: already has attempts
-          attempts = test.attempts;
-        } else if (test.retryResults && test.retryResults.length > 0) {
-          // Legacy format: convert retryResults to attempts
-          attempts = test.retryResults.map((retry) => ({
-            attemptIndex: retry.retry_index ?? retry.retryIndex ?? 0,
-            status: retry.status,
-            duration: retry.duration,
-            error: retry.error,
-            errorStack: retry.error_stack ?? retry.errorStack,
-            screenshots: retry.screenshots || [],
-            attachments: retry.attachments || [],
-            startTime: retry.started_at || retry.startTime,
-          }));
-        } else {
-          // No retries: create single attempt from test data
-          attempts = [
-            {
-              attemptIndex: 0,
-              status: test.status,
-              duration: test.duration,
-              error: test.error,
-              errorStack: undefined,
-              screenshots: test.screenshots || [],
-              attachments: [], // Will be populated from test.attachments if available
-              startTime: test.started_at,
-            },
-          ];
-        }
-
+      testRun.tests?.map((test: TestInRun) => {
         return {
           id: test.id,
           suite_test_id: test.suite_test_id,
@@ -184,16 +141,14 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
               : (test.status as "passed" | "failed" | "flaky" | "skipped"),
           duration: formatDuration(test.duration),
           metadata: test.metadata,
-          attempts,
-          // Raw data for timeline
+          attempts: test.attempts,
           worker_index: test.worker_index,
           started_at: test.started_at,
-          durationMs: test.duration, // Keep original number for timeline
+          durationMs: test.duration,
         };
       }) ?? [];
     let filtered = allTestCases;
 
-    // Apply status filter
     if (statusFilter !== "all") {
       filtered = filtered.filter((test) => test.status === statusFilter);
     }
@@ -245,7 +200,7 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                     </Badge>
                   )}
                 <Badge variant="outline">
-                  {testRun.environment_display || testRun.environment}
+                  {testRun.environment_display || testRun.environmentName}
                 </Badge>
                 {testRun.trigger_display && (
                   <Badge variant="secondary">
@@ -599,7 +554,6 @@ export function TestDetailsView({ testRun }: TestDetailsViewProps) {
                 return flatTests;
               })()}
               onTestSelect={(testId) => {
-                // Extract original test ID (remove -retry-N suffix)
                 const originalId = testId.includes("-retry-")
                   ? testId.split("-retry-")[0]
                   : testId;

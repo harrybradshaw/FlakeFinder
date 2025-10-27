@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getTestRun } from "@/lib/test-runs";
+import { type TestRunDetails } from "@/types/api";
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +19,7 @@ export async function GET(
     }
 
     // Use shared function to fetch test run
-    const testRun = await getTestRun(id, userId);
+    const testRun: TestRunDetails | null = await getTestRun(id, userId);
 
     if (!testRun) {
       return NextResponse.json(

@@ -13,9 +13,13 @@ describe("playwright-report-utils", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    testReportFile = new File([buffer], "playwright-report-testing-466.zip", {
-      type: "application/zip",
-    });
+    testReportFile = new File(
+      [buffer as any],
+      "playwright-report-testing-466.zip",
+      {
+        type: "application/zip",
+      },
+    );
   });
 
   describe("processPlaywrightReportFile", () => {
@@ -190,7 +194,7 @@ describe("playwright-report-utils", () => {
       zip.file("empty.json", JSON.stringify({ tests: [] }));
 
       const buffer = await zip.generateAsync({ type: "nodebuffer" });
-      const invalidFile = new File([buffer], "invalid.zip", {
+      const invalidFile = new File([buffer as any], "invalid.zip", {
         type: "application/zip",
       });
 

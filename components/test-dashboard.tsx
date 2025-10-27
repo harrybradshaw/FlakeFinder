@@ -18,14 +18,14 @@ import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { TestRunsList } from "@/components/test-runs-list";
 import { TrendsChart } from "@/components/trends-chart";
 import { TestStats } from "@/components/test-stats";
-import type { TestRun } from "@/lib/mock-data";
+import type { TestRunsResponse, TestRun } from "@/types/api";
 
-const fetcher = async (url: string) => {
+const fetcher = async (url: string): Promise<TestRunsResponse> => {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to fetch: ${response.statusText}`);
   }
-  const data = await response.json();
+  const data: TestRunsResponse = await response.json();
   return { runs: data.runs || [], total: data.total || 0 };
 };
 
@@ -36,6 +36,10 @@ const configFetcher = async (url: string) => {
 };
 
 export function TestDashboard() {
+  const [selectedProject, setSelectedProject] = useQueryState(
+    "project",
+    parseAsString.withDefault("all"),
+  );
   const [selectedEnvironment, setSelectedEnvironment] = useQueryState(
     "environment",
     parseAsString.withDefault("all"),
@@ -65,11 +69,17 @@ export function TestDashboard() {
   );
   const { data: suitesData } = useSWRImmutable("/api/suites", configFetcher);
 
+  // Check if user is a member of any organization
+  const { data: userOrgsData } = useSWRImmutable(
+    "/api/user/organizations",
+    configFetcher,
+  );
+
   const environments = environmentsData?.environments || [];
   const triggers = triggersData?.triggers || [];
   const suites = suitesData?.suites || [];
+  const hasOrganization = (userOrgsData?.organizations?.length || 0) > 0;
 
-  // Build API URL with query parameters
   const apiUrl = useMemo(() => {
     const params = new URLSearchParams({
       timeRange: selectedTimeRange,
@@ -77,6 +87,9 @@ export function TestDashboard() {
       offset: String((page - 1) * 20),
     });
 
+    if (selectedProject !== "all") {
+      params.append("project", selectedProject);
+    }
     if (selectedEnvironment !== "all") {
       params.append("environment", selectedEnvironment);
     }
@@ -89,6 +102,7 @@ export function TestDashboard() {
 
     return `/api/test-runs?${params.toString()}`;
   }, [
+    selectedProject,
     selectedEnvironment,
     selectedTrigger,
     selectedSuite,
@@ -96,12 +110,14 @@ export function TestDashboard() {
     page,
   ]);
 
-  // Build stats API URL (same filters but no pagination)
   const statsUrl = useMemo(() => {
     const params = new URLSearchParams({
       timeRange: selectedTimeRange,
     });
 
+    if (selectedProject !== "all") {
+      params.append("project", selectedProject);
+    }
     if (selectedEnvironment !== "all") {
       params.append("environment", selectedEnvironment);
     }
@@ -113,7 +129,13 @@ export function TestDashboard() {
     }
 
     return `/api/test-runs/stats?${params.toString()}`;
-  }, [selectedEnvironment, selectedTrigger, selectedSuite, selectedTimeRange]);
+  }, [
+    selectedProject,
+    selectedEnvironment,
+    selectedTrigger,
+    selectedSuite,
+    selectedTimeRange,
+  ]);
 
   // Fetch data with SWR
   const { data, error, isLoading } = useSWR<{ runs: TestRun[]; total: number }>(
@@ -151,6 +173,7 @@ export function TestDashboard() {
     !error &&
     testRuns.length === 0 &&
     totalCount === 0 &&
+    selectedProject === "all" &&
     selectedEnvironment === "all" &&
     selectedTrigger === "all" &&
     selectedSuite === "all" &&
@@ -286,115 +309,144 @@ export function TestDashboard() {
 
         <TestStats stats={stats} />
 
-        <Tabs defaultValue="runs" className="mt-6">
-          <TabsList>
-            <TabsTrigger value="runs">Test Runs</TabsTrigger>
-            <TabsTrigger value="trends">Trends</TabsTrigger>
-          </TabsList>
+        {hasOrganization ? (
+          <Tabs defaultValue="runs" className="mt-6">
+            <TabsList>
+              <TabsTrigger value="runs">Test Runs</TabsTrigger>
+              <TabsTrigger value="trends">Trends</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="runs" className="mt-6">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-muted-foreground">Loading test runs...</p>
-              </div>
-            ) : error ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-destructive">Error: {error.message}</p>
-              </div>
-            ) : testRuns.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4">
-                <div className="text-center max-w-md">
-                  {hasNoAccessibleProjects ? (
-                    <>
-                      <h3 className="text-lg font-semibold mb-2">
-                        Welcome to FlakeFinder!
-                      </h3>
-                      <p className="text-muted-foreground mb-4">
-                        You don&apos;t have access to any projects yet. Either
-                        join an organization with existing projects, or upload
-                        your first test results to get started.
-                      </p>
-                      <Button
-                        onClick={() => {
-                          // Navigate to upload - you can adjust this path as needed
-                          window.location.href = "/";
-                        }}
-                      >
-                        Upload Test Results
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <h3 className="text-lg font-semibold mb-2">
-                        No test runs found
-                      </h3>
-                      <p className="text-muted-foreground mb-4">
-                        No test runs match your current filters. Try adjusting
-                        your filters or upload new test results.
-                      </p>
-                      <Button
-                        onClick={() => {
-                          setSelectedEnvironment("all");
-                          setSelectedTrigger("all");
-                          setSelectedSuite("all");
-                          setSelectedTimeRange("7d");
-                          setPage(1);
-                        }}
-                        variant="outline"
-                      >
-                        Clear Filters
-                      </Button>
-                    </>
-                  )}
+            <TabsContent value="runs" className="mt-6">
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-muted-foreground">Loading test runs...</p>
                 </div>
-              </div>
-            ) : (
-              <>
-                <TestRunsList runs={testRuns} />
-                {totalPages > 1 && (
-                  <div className="mt-6 flex items-center justify-between">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {(page - 1) * 20 + 1} to{" "}
-                      {Math.min(page * 20, totalCount)} of {totalCount} runs
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(page - 1)}
-                        disabled={page === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
-                      </Button>
-                      <div className="text-sm text-muted-foreground">
-                        Page {page} of {totalPages}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(page + 1)}
-                        disabled={page === totalPages}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
+              ) : error ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-destructive">Error: {error.message}</p>
+                </div>
+              ) : testRuns.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-4">
+                  <div className="text-center max-w-md">
+                    {hasNoAccessibleProjects ? (
+                      <>
+                        <h3 className="text-lg font-semibold mb-2">
+                          Welcome to FlakeFinder!
+                        </h3>
+                        {!hasOrganization ? (
+                          <>
+                            <p className="text-muted-foreground mb-4">
+                              You&apos;re not currently a member of any
+                              organization. Please contact an organization owner
+                              to be added, or wait for an invitation to join.
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Once you&apos;re added to an organization,
+                              you&apos;ll be able to view test results and
+                              upload new test runs.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-muted-foreground mb-4">
+                              You don&apos;t have access to any projects yet.
+                              Upload your first test results to get started.
+                            </p>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="text-lg font-semibold mb-2">
+                          No test runs found
+                        </h3>
+                        <p className="text-muted-foreground mb-4">
+                          No test runs match your current filters. Try adjusting
+                          your filters or upload new test results.
+                        </p>
+                        <Button
+                          onClick={() => {
+                            setSelectedProject("all");
+                            setSelectedEnvironment("all");
+                            setSelectedTrigger("all");
+                            setSelectedSuite("all");
+                            setSelectedTimeRange("7d");
+                            setPage(1);
+                          }}
+                          variant="outline"
+                        >
+                          Clear Filters
+                        </Button>
+                      </>
+                    )}
                   </div>
-                )}
-              </>
-            )}
-          </TabsContent>
+                </div>
+              ) : (
+                <>
+                  <TestRunsList runs={testRuns} />
+                  {totalPages > 1 && (
+                    <div className="mt-6 flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {(page - 1) * 20 + 1} to{" "}
+                        {Math.min(page * 20, totalCount)} of {totalCount} runs
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(page - 1)}
+                          disabled={page === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          Previous
+                        </Button>
+                        <div className="text-sm text-muted-foreground">
+                          Page {page} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(page + 1)}
+                          disabled={page === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
 
-          <TabsContent value="trends" className="mt-6">
-            <TrendsChart
-              timeRange={selectedTimeRange}
-              environment={selectedEnvironment}
-              trigger={selectedTrigger}
-              suite={selectedSuite}
-            />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="trends" className="mt-6">
+              <TrendsChart
+                timeRange={selectedTimeRange}
+                project={selectedProject}
+                environment={selectedEnvironment}
+                trigger={selectedTrigger}
+                suite={selectedSuite}
+              />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 px-4 mt-6">
+            <div className="text-center max-w-md">
+              <h3 className="text-lg font-semibold mb-2">
+                Welcome to FlakeFinder!
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                You&apos;re not currently a member of any organization. Please
+                contact an organization owner to be added, or wait for an
+                invitation to join.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Once you&apos;re added to an organization, you&apos;ll be able
+                to view test results and upload new test runs.
+              </p>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

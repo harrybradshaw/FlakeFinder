@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
-import { groupRunsByDay } from "@/lib/trends-utils";
+import { groupRunsByDay } from "@/lib/utils/trends-utils";
+import { createRepositories } from "@/lib/repositories";
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,26 +29,18 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
     // Get user's organizations
-    const { data: userOrgs } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .eq("user_id", userId);
-
-    const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
+    const userOrgIds = await repos.lookups.getUserOrganizations(userId);
 
     if (userOrgIds.length === 0) {
       return NextResponse.json({ trends: [] });
     }
 
     // Get accessible projects
-    const { data: orgProjects } = await supabase
-      .from("organization_projects")
-      .select("project_id")
-      .in("organization_id", userOrgIds);
-
-    const accessibleProjectIds = orgProjects?.map((op) => op.project_id) || [];
+    const accessibleProjectIds =
+      await repos.lookups.getAccessibleProjectIds(userOrgIds);
 
     if (accessibleProjectIds.length === 0) {
       return NextResponse.json({ trends: [] });
@@ -79,98 +72,55 @@ export async function GET(request: NextRequest) {
     let triggerId = null;
     let suiteId = null;
 
-    if (project && project !== "all") {
-      const { data: projData } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("name", project)
-        .eq("active", true)
-        .single();
-      if (projData) projectId = projData.id;
+    if (project) {
+      projectId = project;
     }
 
     if (environment && environment !== "all") {
-      const { data: envData } = await supabase
-        .from("environments")
-        .select("id")
-        .eq("name", environment)
-        .eq("active", true)
-        .single();
+      const envData = await repos.lookups.getEnvironmentByName(environment);
       if (envData) environmentId = envData.id;
     }
 
     if (trigger && trigger !== "all") {
-      const { data: trigData } = await supabase
-        .from("test_triggers")
-        .select("id")
-        .eq("name", trigger)
-        .eq("active", true)
-        .single();
+      const trigData = await repos.lookups.getTriggerByName(trigger);
       if (trigData) triggerId = trigData.id;
     }
 
     if (suite && suite !== "all") {
-      const { data: suiteData } = await supabase
-        .from("suites")
-        .select("id")
-        .eq("name", suite)
-        .eq("active", true)
-        .single();
+      const suiteData = await repos.lookups.getSuiteByName(suite);
       if (suiteData) suiteId = suiteData.id;
     }
 
-    // Build query
-    let query = supabase
-      .from("test_runs")
-      .select("id, timestamp, total, passed, failed, flaky, wall_clock_duration")
-      .in("project_id", accessibleProjectIds)
-      .gte("timestamp", startDate.toISOString())
-      .order("timestamp", { ascending: true });
-
-    if (projectId) {
-      if (!accessibleProjectIds.includes(projectId)) {
-        return NextResponse.json({ trends: [] });
-      }
-      query = query.eq("project_id", projectId);
-    }
-    if (environmentId) {
-      query = query.eq("environment_id", environmentId);
-    }
-    if (triggerId) {
-      query = query.eq("trigger_id", triggerId);
+    // Check project access
+    if (projectId && !accessibleProjectIds.includes(projectId)) {
+      return NextResponse.json({ trends: [] });
     }
 
     // Handle suite filter
+    let testRunIds: string[] | null = null;
     if (suiteId) {
-      const { data: suiteTestIds } = await supabase
-        .from("suite_tests")
-        .select("id")
-        .eq("suite_id", suiteId);
+      const suiteTestIds = await repos.testRuns.getSuiteTestIdsBySuite(suiteId);
 
-      const suiteTestIdList = suiteTestIds?.map((st) => st.id) || [];
-
-      if (suiteTestIdList.length === 0) {
+      if (suiteTestIds.length === 0) {
         return NextResponse.json({ trends: [] });
       }
 
-      const { data: testsInSuite } = await supabase
-        .from("tests")
-        .select("test_run_id")
-        .in("suite_test_id", suiteTestIdList);
+      testRunIds = await repos.testRuns.getTestRunIdsBySuiteTests(suiteTestIds);
 
-      const testRunIdsInSuite = [
-        ...new Set(testsInSuite?.map((t) => t.test_run_id) || []),
-      ];
-
-      if (testRunIdsInSuite.length === 0) {
+      if (testRunIds.length === 0) {
         return NextResponse.json({ trends: [] });
       }
-
-      query = query.in("id", testRunIdsInSuite);
     }
 
-    // Execute query
-    const { data: runs } = await query;
+    // Get test run trends
+    const runs = await repos.testRuns.getTestRunTrends(
+      accessibleProjectIds,
+      startDate,
+      projectId,
+      environmentId,
+      triggerId,
+      testRunIds,
+    );
 
     if (!runs || runs.length === 0) {
       return NextResponse.json({ trends: [] });

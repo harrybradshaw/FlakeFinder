@@ -1,17 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
 import JSZip from "jszip";
 import {
-  processScreenshots,
-  processTestsFromZip,
-  lookupDatabaseIds,
   verifyUserProjectAccess,
-  checkDuplicate,
-  insertTestRun,
-} from "@/lib/upload-processing";
-import { mapScreenshotPaths } from "@/lib/zip-extraction-utils";
+  lookupDatabaseIds,
+} from "@/lib/upload/upload-processing";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { type Database } from "@/types/supabase";
+import { processUpload } from "@/lib/upload/shared-upload-handler";
+import { uploadZipFormDataFields } from "@/lib/upload/upload-constants";
+import { createRepositories } from "@/lib/repositories";
 
 const LOG_PREFIX = "[Upload]";
 
@@ -47,14 +45,19 @@ export async function POST(request: NextRequest) {
 
     // 2. Parse form data
     const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const projectName = (formData.get("project") as string) || "default";
-    const initialEnvironment = formData.get("environment") as string;
-    const trigger = formData.get("trigger") as string;
-    const suite = formData.get("suite") as string;
-    const initialBranch = (formData.get("branch") as string) || "unknown";
-    const commit = (formData.get("commit") as string) || "unknown";
-    const preCalculatedHash = formData.get("contentHash") as string | null;
+    const file = formData.get(uploadZipFormDataFields.file) as File;
+    const initialEnvironment = formData.get(
+      uploadZipFormDataFields.environmentName,
+    ) as string;
+    const trigger = formData.get(uploadZipFormDataFields.triggerName) as string;
+    const suite = formData.get(uploadZipFormDataFields.suiteId) as string;
+    const initialBranch =
+      (formData.get(uploadZipFormDataFields.branch) as string) || "unknown";
+    const commit =
+      (formData.get(uploadZipFormDataFields.commit) as string) || "unknown";
+    const preCalculatedHash = formData.get(
+      uploadZipFormDataFields.contentHash,
+    ) as string | null;
 
     // Validate required fields
     if (!file || !initialEnvironment || !trigger || !suite) {
@@ -66,10 +69,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`${LOG_PREFIX} Processing upload for user:`, userId);
-    console.log(`${LOG_PREFIX} Project:`, projectName);
-
-    // 3. Set up Supabase client
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       console.log(`${LOG_PREFIX} Supabase not configured`);
       return NextResponse.json(
@@ -83,13 +82,13 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_ANON_KEY,
     );
 
-    // 4. Look up project and get database IDs
+    const repos = createRepositories(supabase);
+
     const idsResult = await lookupDatabaseIds({
-      supabase,
-      projectName,
-      environment: initialEnvironment,
-      trigger,
-      suite,
+      lookupRepo: repos.lookups,
+      environmentName: initialEnvironment,
+      triggerName: trigger,
+      suiteId: suite,
       logPrefix: LOG_PREFIX,
     });
 
@@ -104,10 +103,9 @@ export async function POST(request: NextRequest) {
 
     // 5. Verify user has access to this project
     const accessResult = await verifyUserProjectAccess({
-      supabase,
+      lookupRepo: repos.lookups,
       userId,
       projectId: databaseIds.projectId,
-      projectName,
       logPrefix: LOG_PREFIX,
     });
 
@@ -118,93 +116,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Load ZIP and process tests
+    // 6. Load ZIP and process upload using shared handler
     // Note: No server-side optimization - client already optimized
     const arrayBuffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
 
-    const processedData = await processTestsFromZip(
+    const result = await processUpload(
       zip,
-      initialBranch,
-      initialEnvironment,
-      preCalculatedHash || undefined,
+      {
+        environment: initialEnvironment,
+        trigger: trigger,
+        suite: suite,
+        branch: initialBranch,
+        commit,
+        preCalculatedHash: preCalculatedHash || undefined,
+      },
+      databaseIds.projectId,
+      file.name,
       LOG_PREFIX,
     );
 
-    // 7. Process screenshots
-    const { screenshotUrls, screenshotCount } = await processScreenshots(
-      zip,
-      LOG_PREFIX,
-    );
-    mapScreenshotPaths(processedData.tests, screenshotUrls);
-
-    console.log(`${LOG_PREFIX} Final upload parameters:`, {
-      environment: processedData.environment,
-      trigger,
-      suite,
-      branch: processedData.branch,
-      commit,
-    });
-
-    // 8. Check for duplicate
-    const duplicateResult = await checkDuplicate({
-      supabase,
-      contentHash: processedData.contentHash,
-      projectId: databaseIds.projectId,
-      logPrefix: LOG_PREFIX,
-    });
-
-    if (duplicateResult.isDuplicate && duplicateResult.existingRun) {
-      const existingTime = new Date(
-        duplicateResult.existingRun.timestamp,
-      ).toLocaleString();
+    // 7. Handle result
+    if (!result.success) {
+      const status = result.isDuplicate ? 409 : 500;
       return NextResponse.json(
         {
-          error: "Duplicate upload detected",
-          message: `This exact test run was already uploaded on ${existingTime}. If you want to re-upload, please modify the tests or wait for different results.`,
-          existingRunId: duplicateResult.existingRun.id,
-          isDuplicate: true,
+          error: result.error,
+          message: result.message,
+          details: result.details,
+          isDuplicate: result.isDuplicate,
+          existingRunId: result.existingRunId,
         },
-        { status: 409 },
+        { status },
       );
     }
 
-    // 9. Insert test run and all related data
-    const insertResult = await insertTestRun({
-      supabase,
-      databaseIds,
-      processedData,
-      commit,
-      filename: file.name,
-      logPrefix: LOG_PREFIX,
-    });
-
-    if (!insertResult.success || !insertResult.testRunId) {
-      return NextResponse.json(
-        {
-          error: "Failed to store test results",
-          details: insertResult.error,
-        },
-        { status: 500 },
-      );
-    }
-
-    // 10. Return success response
+    // 8. Return success response
     return NextResponse.json({
       success: true,
-      testRun: {
-        id: insertResult.testRunId,
-        timestamp: processedData.timestamp,
-        environment: processedData.environment,
-        trigger,
-        branch: processedData.branch,
-        commit,
-        ...processedData.stats,
-        duration: processedData.durationFormatted,
-        contentHash: processedData.contentHash,
-        tests: processedData.tests,
-      },
-      message: `Processed ${processedData.tests.length} tests with ${screenshotCount} screenshots`,
+      testRun: result.testRun,
+      message: result.message,
     });
   } catch (error) {
     console.error(`${LOG_PREFIX} Error processing ZIP file:`, error);

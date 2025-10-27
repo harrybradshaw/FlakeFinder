@@ -119,7 +119,7 @@ describe("TrendsChart - Recharts stackOffset behavior", () => {
   it("should understand that stackOffset='expand' normalizes to 0-1", () => {
     // With stackOffset="expand", Recharts should normalize all values
     // so the stack always goes from 0 to 1 (0% to 100%)
-    
+
     // Example data point
     const dataPoint = {
       passed: 303,

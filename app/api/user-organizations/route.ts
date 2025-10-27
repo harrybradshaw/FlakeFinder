@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { type Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
-// GET - List user-organization relationships for user's organizations
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const { userId } = await auth();
 
@@ -26,45 +26,20 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
     // Get organizations the user is an admin/owner of
-    const { data: userOrgs, error: userOrgsError } = await supabase
-      .from("user_organizations")
-      .select("organization_id, role")
-      .eq("user_id", userId)
-      .in("role", ["admin", "owner"]);
-
-    if (userOrgsError) {
-      console.error("[API] Error fetching user organizations:", userOrgsError);
-      return NextResponse.json(
-        { error: userOrgsError.message },
-        { status: 500 },
-      );
-    }
-
-    const adminOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
+    const adminOrgIds = await repos.organizations.getAdminOrganizations(userId);
 
     if (adminOrgIds.length === 0) {
       return NextResponse.json({ memberships: [] });
     }
 
     // Fetch all user-organization relationships for organizations user can manage
-    const { data, error } = await supabase
-      .from("user_organizations")
-      .select(
-        `
-        *,
-        organization:organizations(*)
-      `,
-      )
-      .in("organization_id", adminOrgIds);
+    const memberships =
+      await repos.organizations.getMembershipsForOrganizations(adminOrgIds);
 
-    if (error) {
-      console.error("[API] Error fetching memberships:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ memberships: data || [] });
+    return NextResponse.json({ memberships });
   } catch (error) {
     console.error("[API] Error fetching memberships:", error);
     return NextResponse.json(
@@ -111,17 +86,14 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
-    // Verify requesting user is an admin/owner of the organization
-    const { data: userRole, error: roleError } = await supabase
-      .from("user_organizations")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("organization_id", organization_id)
-      .in("role", ["admin", "owner"])
-      .single();
+    const isAdmin = await repos.organizations.isAdminOrOwner(
+      userId,
+      organization_id,
+    );
 
-    if (roleError || !userRole) {
+    if (!isAdmin) {
       return NextResponse.json(
         {
           error:
@@ -131,23 +103,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add the user to the organization
-    const { data, error } = await supabase
-      .from("user_organizations")
-      .insert({
-        user_id,
+    await repos.organizations.addMember(
+      organization_id,
+      user_id,
+      role || "member",
+    );
+
+    const memberships =
+      await repos.organizations.getMembershipsForOrganizations([
         organization_id,
-        role: role || "member",
-      })
-      .select()
-      .single();
+      ]);
+    const membership = memberships.find((m) => m.user_id === user_id);
 
-    if (error) {
-      console.error("[API] Failed to add user to organization:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ membership: data });
+    return NextResponse.json({ membership });
   } catch (error) {
     console.error("[API] Error adding user to organization:", error);
     return NextResponse.json(
@@ -163,16 +131,6 @@ export async function POST(request: NextRequest) {
 // DELETE - Remove a user from an organization
 export async function DELETE(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const membershipId = searchParams.get("id");
-
-    if (!membershipId) {
-      return NextResponse.json(
-        { error: "Missing required parameter: id" },
-        { status: 400 },
-      );
-    }
-
     const { userId } = await auth();
 
     if (!userId) {
@@ -194,31 +152,63 @@ export async function DELETE(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
-    // Get the membership details
-    const { data: membership, error: fetchError } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .eq("id", membershipId)
-      .single();
+    // Support both query param (id) and body-based (organizationId + userId) deletion
+    const searchParams = request.nextUrl.searchParams;
+    const membershipId = searchParams.get("id");
 
-    if (fetchError || !membership) {
+    let targetOrgId: string;
+    let targetUserId: string;
+
+    if (membershipId) {
+      // Query param based deletion (original method)
+      const membership =
+        await repos.organizations.getMembershipById(membershipId);
+
+      if (!membership) {
+        return NextResponse.json(
+          { error: "Membership not found" },
+          { status: 404 },
+        );
+      }
+
+      targetOrgId = membership.organization_id;
+      targetUserId = membership.user_id;
+    } else {
+      // Body-based deletion (for backward compatibility with /api/organizations/members)
+      const body = await request.json();
+      const { organizationId, userId: memberUserId } = body;
+
+      if (!organizationId || !memberUserId) {
+        return NextResponse.json(
+          {
+            error:
+              "Missing required parameters: organizationId and userId, or id",
+          },
+          { status: 400 },
+        );
+      }
+
+      targetOrgId = organizationId;
+      targetUserId = memberUserId;
+    }
+
+    // Prevent removing yourself
+    if (targetUserId === userId) {
       return NextResponse.json(
-        { error: "Membership not found" },
-        { status: 404 },
+        { error: "You cannot remove yourself from the organization" },
+        { status: 400 },
       );
     }
 
     // Verify requesting user is an admin/owner of the organization
-    const { data: userRole, error: roleError } = await supabase
-      .from("user_organizations")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("organization_id", membership.organization_id)
-      .in("role", ["admin", "owner"])
-      .single();
+    const isAdmin = await repos.organizations.isAdminOrOwner(
+      userId,
+      targetOrgId,
+    );
 
-    if (roleError || !userRole) {
+    if (!isAdmin) {
       return NextResponse.json(
         {
           error:
@@ -229,15 +219,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete the membership
-    const { error } = await supabase
-      .from("user_organizations")
-      .delete()
-      .eq("id", membershipId);
-
-    if (error) {
-      console.error("[API] Failed to delete membership:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    await repos.organizations.removeMember(targetOrgId, targetUserId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

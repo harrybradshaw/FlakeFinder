@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Clock, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import type { TestRun } from "@/lib/mock-data";
+import type { TestRun } from "@/types/api";
 
 interface TestRunsListProps {
   runs: TestRun[];
@@ -63,13 +63,14 @@ export function TestRunsList({ runs }: TestRunsListProps) {
                             </Badge>
                           )}
                         <Badge variant="outline" className="text-xs">
-                          {run.environment_display || run.environment}
+                          {run.environment_display || run.environmentName}
                         </Badge>
                         <Badge variant="secondary" className="text-xs">
                           {run.trigger_icon && (
                             <span className="mr-1">{run.trigger_icon}</span>
                           )}
-                          {run.trigger_display || getTriggerLabel(run.trigger)}
+                          {run.trigger_display ||
+                            getTriggerLabel(run.triggerName)}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">

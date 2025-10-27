@@ -3,33 +3,30 @@ import { auth } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
+import { createRepositories } from "@/lib/repositories";
 
-// Cached function to get user's organization IDs
-const getUserOrganizations = cache(async (userId: string) => {
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-    return { userOrgIds: [], error: null };
-  }
+const getUserOrganizations = cache(
+  async (userId: string): Promise<{ userOrgIds: string[]; error: unknown }> => {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+      return { userOrgIds: [], error: null };
+    }
 
-  const supabase = createClient<Database>(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_ANON_KEY,
-  );
+    const supabase = createClient<Database>(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+    );
+    const repos = createRepositories(supabase);
 
-  const { data: userOrgs, error: userOrgsError } = await supabase
-    .from("user_organizations")
-    .select("organization_id")
-    .eq("user_id", userId);
+    try {
+      const userOrgIds = await repos.lookups.getUserOrganizations(userId);
+      return { userOrgIds, error: null };
+    } catch (error) {
+      return { userOrgIds: [], error };
+    }
+  },
+);
 
-  if (userOrgsError) {
-    return { userOrgIds: [], error: userOrgsError };
-  }
-
-  const userOrgIds = userOrgs?.map((uo) => uo.organization_id) || [];
-  return { userOrgIds, error: null };
-});
-
-// Cached function to get organization projects
-export const getOrganizationProjects = cache(async (userOrgIds: string[]) => {
+const getOrganizationProjects = cache(async (userOrgIds: string[]) => {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     return { projectIds: [], error: null };
   }
@@ -38,21 +35,16 @@ export const getOrganizationProjects = cache(async (userOrgIds: string[]) => {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
+  const repos = createRepositories(supabase);
 
-  const { data: orgProjects, error: orgProjectsError } = await supabase
-    .from("organization_projects")
-    .select("project_id, organization_id")
-    .in("organization_id", userOrgIds);
-
-  if (orgProjectsError) {
-    return { projectIds: [], error: orgProjectsError };
+  try {
+    const projectIds = await repos.lookups.getAccessibleProjectIds(userOrgIds);
+    return { projectIds, error: null };
+  } catch (error) {
+    return { projectIds: [], error };
   }
-
-  const projectIds = orgProjects?.map((op) => op.project_id) || [];
-  return { projectIds, error: null };
 });
 
-// Cached function to get project details
 const getProjectDetails = cache(async (projectIds: string[]) => {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     return { projects: [], error: null };
@@ -62,82 +54,87 @@ const getProjectDetails = cache(async (projectIds: string[]) => {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY,
   );
+  const repos = createRepositories(supabase);
 
-  const { data, error } = await supabase
-    .from("projects")
-    .select("*")
-    .in("id", projectIds)
-    .eq("active", true)
-    .order("name", { ascending: true });
-
-  if (error) {
+  try {
+    const projects = await repos.projects.getProjectsByIds(projectIds, true);
+    return { projects, error: null };
+  } catch (error) {
     return { projects: [], error };
   }
-
-  return { projects: data || [], error: null };
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-      console.log("[API] Supabase not configured, returning empty array");
       return NextResponse.json({ projects: [] });
     }
 
-    // Get user's organization memberships from Clerk
     const { userId } = await auth();
     if (!userId) {
-      console.log("[API] User not authenticated");
       return NextResponse.json({ projects: [] });
     }
 
-    // Get user's custom organization memberships (cached)
+    const searchParams = request.nextUrl.searchParams;
+    const organizationId = searchParams.get("organizationId");
+
     const { userOrgIds, error: userOrgsError } =
       await getUserOrganizations(userId);
 
     if (userOrgsError) {
       console.error("[API] Error fetching user organizations:", userOrgsError);
-      return NextResponse.json(
-        { error: userOrgsError.message },
-        { status: 500 },
-      );
+      const errorMessage =
+        userOrgsError instanceof Error
+          ? userOrgsError.message
+          : "Failed to fetch user organizations";
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
-
-    console.log("[API] User organizations:", userOrgIds);
 
     if (userOrgIds.length === 0) {
       console.log("[API] User has no organization memberships");
       return NextResponse.json({ projects: [] });
     }
 
-    // Query projects that belong to user's organizations (cached)
+    let targetOrgIds = userOrgIds;
+    if (organizationId) {
+      if (!userOrgIds.includes(organizationId)) {
+        console.log(
+          "[API] User does not have access to specified organization",
+        );
+        return NextResponse.json({ projects: [] });
+      }
+      targetOrgIds = [organizationId];
+      console.log("[API] Filtering projects for organization:", organizationId);
+    }
+
     const { projectIds, error: orgProjectsError } =
-      await getOrganizationProjects(userOrgIds);
+      await getOrganizationProjects(targetOrgIds);
 
     if (orgProjectsError) {
       console.error(
         "[API] Error fetching organization projects:",
         orgProjectsError,
       );
-      return NextResponse.json(
-        { error: orgProjectsError.message },
-        { status: 500 },
-      );
+      const errorMessage =
+        orgProjectsError instanceof Error
+          ? orgProjectsError.message
+          : "Failed to fetch organization projects";
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 
-    console.log("[API] Project IDs from organization_projects:", projectIds);
-
     if (projectIds.length === 0) {
-      console.log("[API] No projects found for user's organizations");
       return NextResponse.json({ projects: [] });
     }
 
-    // Fetch the actual project details (cached)
     const { projects, error } = await getProjectDetails(projectIds);
 
     if (error) {
-      console.error("[API] Supabase error:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("[API] Error fetching project details:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch project details";
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
 
     return NextResponse.json({ projects });
@@ -165,7 +162,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user authentication
     const { userId } = await auth();
 
     if (!userId) {
@@ -195,41 +191,33 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_URL,
       process.env.SUPABASE_ANON_KEY,
     );
+    const repos = createRepositories(supabase);
 
-    // Create the project
-    const { data, error } = await supabase
-      .from("projects")
-      .insert({
-        name,
-        display_name,
-        description,
-        color: color || "#3b82f6",
-        active: true,
-      })
-      .select()
-      .single();
+    const project = await repos.projects.createProject({
+      name,
+      display_name,
+      description,
+      color: color || "#3b82f6",
+      active: true,
+    });
 
-    if (error) {
-      console.error("[API] Failed to create project:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Link the project to the organization
-    const { error: linkError } = await supabase
-      .from("organization_projects")
-      .insert({
-        organization_id: targetOrgId,
-        project_id: data.id,
-      });
-
-    if (linkError) {
+    try {
+      await repos.projects.linkProjectToOrganization(project.id, targetOrgId);
+    } catch (linkError) {
       console.error("[API] Failed to link project to organization:", linkError);
-      // Optionally: roll back the project creation
-      await supabase.from("projects").delete().eq("id", data.id);
-      return NextResponse.json({ error: linkError.message }, { status: 500 });
+      // Roll back the project creation
+      try {
+        await repos.projects.deleteProject(project.id);
+      } catch (deleteError) {
+        console.error(
+          "[API] Failed to roll back project creation:",
+          deleteError,
+        );
+      }
+      throw linkError;
     }
 
-    return NextResponse.json({ project: data });
+    return NextResponse.json({ project });
   } catch (error) {
     console.error("[API] Error creating project:", error);
     return NextResponse.json(

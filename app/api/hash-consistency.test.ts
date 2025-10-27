@@ -23,7 +23,7 @@ describe("Hash Calculation Consistency", () => {
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
     const testReportFile = new File(
-      [buffer],
+      [buffer as any],
       "playwright-report-testing-466.zip",
       {
         type: "application/zip",
@@ -53,7 +53,7 @@ describe("Hash Calculation Consistency", () => {
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
     const testReportFile = new File(
-      [buffer],
+      [buffer as any],
       "playwright-report-testing-466.zip",
       {
         type: "application/zip",
@@ -81,7 +81,7 @@ describe("Hash Calculation Consistency", () => {
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
     const testReportFile = new File(
-      [buffer],
+      [buffer as any],
       "playwright-report-testing-466.zip",
       {
         type: "application/zip",
@@ -111,7 +111,7 @@ describe("Hash Calculation Consistency", () => {
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
     const testReportFile = new File(
-      [buffer],
+      [buffer as any],
       "playwright-report-testing-466.zip",
       {
         type: "application/zip",
@@ -181,7 +181,7 @@ describe("Hash Calculation Consistency", () => {
     );
 
     // Upload 1: Original file
-    const file1 = new File([buffer], "original.zip", {
+    const file1 = new File([buffer as any], "original.zip", {
       type: "application/zip",
     });
     const { tests: tests1 } = await processPlaywrightReportFile(file1);
@@ -229,7 +229,7 @@ describe("Hash Calculation Consistency", () => {
     const buffer = readFileSync(
       "/Users/harbra/Downloads/playwright-report-testing-466.zip",
     );
-    const testReportFile = new File([buffer], "test.zip", {
+    const testReportFile = new File([buffer as any], "test.zip", {
       type: "application/zip",
     });
     const { tests } = await processPlaywrightReportFile(testReportFile);

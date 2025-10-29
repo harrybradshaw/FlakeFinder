@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { UploadDialog } from "@/components/upload-dialog";
 import { Settings } from "lucide-react";
+import { Route } from "next";
 
 const configFetcher = async (url: string) => {
   const response = await fetch(url);
@@ -84,7 +85,7 @@ export function AppHeader() {
     const newUrl = params.toString()
       ? `${pathname}?${params.toString()}`
       : pathname;
-    router.push(newUrl);
+    router.push(newUrl as Route);
   };
 
   return (

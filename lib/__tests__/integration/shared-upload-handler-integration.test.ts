@@ -714,4 +714,84 @@ describe("Shared Upload Handler Integration", () => {
     );
     console.log(`\nSlack message:`, JSON.stringify(slackMessage, null, 2));
   });
+
+  it("should process large playwright-report-preview--pr-and-merge-group-8890.zip fixture", async () => {
+    // Clear any previous calls
+    vi.clearAllMocks();
+
+    // Load the large fixture file
+    const fixturePath = path.join(
+      __dirname,
+      "../fixtures/playwright-report-preview--pr-and-merge-group-8890.zip",
+    );
+
+    // Check if file exists
+    try {
+      await fs.access(fixturePath);
+    } catch (error) {
+      console.warn(
+        "playwright-report-preview--pr-and-merge-group-8890.zip not found, skipping test",
+      );
+      return;
+    }
+
+    console.log(`Loading large fixture from: ${fixturePath}`);
+    const zipBuffer = await fs.readFile(fixturePath);
+    console.log(
+      `Loaded ZIP buffer: ${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB`,
+    );
+
+    const zip = await JSZip.loadAsync(new Uint8Array(zipBuffer));
+
+    // Log ZIP contents to understand structure
+    const fileNames = Object.keys(zip.files).slice(0, 10); // First 10 files
+    console.log(`ZIP contains ${Object.keys(zip.files).length} files`);
+    console.log(`Sample files:`, fileNames);
+
+    const params = {
+      environment: "production",
+      trigger: "ci",
+      suite: "suite-123",
+      branch: "pr-8890",
+      commit: "pr-and-merge-group-test",
+    };
+
+    const result = await processUpload(
+      zip,
+      params,
+      "project-456",
+      "playwright-report-preview--pr-and-merge-group-8890.zip",
+      "[Large Fixture Test]",
+    );
+
+    // Verify the result
+    console.log("\n=== Upload Result ===");
+    console.log(`Success: ${result.success}`);
+    console.log(`Test Run ID: ${result.testRunId}`);
+    console.log(`Total Tests: ${result.testRun?.total}`);
+    console.log(`Passed: ${result.testRun?.passed}`);
+    console.log(`Failed: ${result.testRun?.failed}`);
+    console.log(`Flaky: ${result.testRun?.flaky}`);
+    console.log(`Duration: ${result.testRun?.duration}`);
+    console.log(`Message: ${result.message}`);
+
+    // Basic assertions
+    expect(result.success).toBe(true);
+    expect(result.testRunId).toBe("run-123");
+    expect(result.testRun).toBeDefined();
+    expect(result.testRun?.total).toBeGreaterThan(0);
+    expect(result.message).toContain("Successfully uploaded");
+
+    // Verify stats add up
+    const statsTotal =
+      (result.testRun?.passed || 0) +
+      (result.testRun?.failed || 0) +
+      (result.testRun?.skipped || 0);
+    expect(statsTotal).toBe(result.testRun?.total);
+
+    // Performance metrics
+    console.log("\n=== Performance Info ===");
+    console.log(`File size: ${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`Number of files in ZIP: ${Object.keys(zip.files).length}`);
+  }, 30000); // 30 second timeout for large file
 });

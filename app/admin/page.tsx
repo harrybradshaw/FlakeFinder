@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Settings, Users, Webhook } from "lucide-react";
 import Link from "next/link";
+import { Route } from "next";
 
 export default function AdminPage() {
   return (
@@ -70,7 +71,7 @@ export default function AdminPage() {
         </Link>
 
         {/* Settings (Placeholder for future) */}
-        <Link href="/admin/settings" className="group">
+        <Link href={"/admin/settings" as Route} className="group">
           <Card className="h-full transition-all hover:shadow-lg hover:border-primary">
             <CardHeader className="pb-3 pt-6">
               <div className="flex items-center gap-3">

@@ -148,8 +148,23 @@ function mapTestResultToTestAttempt(
   let errorMessage = undefined;
   let errorStack = undefined;
   if (result.errors && result.errors.length > 0) {
-    errorMessage = result.errors[0];
-    errorStack = result.errors.join("\n\n");
+    // Handle both string and object error formats
+    const firstError = result.errors[0];
+    if (typeof firstError === "string") {
+      errorMessage = firstError;
+    } else if (firstError && typeof firstError === "object" && "message" in firstError) {
+      errorMessage = firstError.message;
+    }
+    
+    // Build error stack from all errors
+    const errorMessages = result.errors.map((err) => {
+      if (typeof err === "string") return err;
+      if (err && typeof err === "object" && "message" in err) {
+        return (err as any).stack || (err as any).message;
+      }
+      return String(err);
+    });
+    errorStack = errorMessages.join("\n\n");
   }
 
   const steps = result.steps && Array.isArray(result.steps) ? result.steps : [];
@@ -193,7 +208,12 @@ export function mapHtmlFileToTests(
 
     let finalError: string | undefined = undefined;
     if (lastResult.errors && lastResult.errors.length > 0) {
-      finalError = lastResult.errors[0];
+      const firstError = lastResult.errors[0];
+      if (typeof firstError === "string") {
+        finalError = firstError;
+      } else if (firstError && typeof firstError === "object" && "message" in firstError) {
+        finalError = firstError.message;
+      }
     }
 
     const totalDuration =

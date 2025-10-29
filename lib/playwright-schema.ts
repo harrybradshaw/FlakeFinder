@@ -47,7 +47,7 @@ const TestResultSchema = z
     status: z.enum(["passed", "failed", "timedOut", "skipped", "flaky"]),
     duration: z.number(),
     error: ErrorSchema.optional(),
-    errors: z.array(z.string()).optional(),
+    errors: z.array(z.union([z.string(), ErrorSchema])).optional(), // Can be string or error object
     attachments: z.array(AttachmentSchema).optional(),
     retry: z.number(),
     startTime: z.string(),

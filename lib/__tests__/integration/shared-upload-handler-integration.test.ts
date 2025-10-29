@@ -789,6 +789,23 @@ describe("Shared Upload Handler Integration", () => {
       (result.testRun?.skipped || 0);
     expect(statsTotal).toBe(result.testRun?.total);
 
+    // Check error messages from failed tests
+    console.log("\n=== Error Messages ===");
+    const failedTests = result.testRun?.tests?.filter((t: any) => t.status === "failed");
+    if (failedTests && failedTests.length > 0) {
+      failedTests.forEach((test: any, idx: number) => {
+        console.log(`Failed Test ${idx + 1}: ${test.name}`);
+        console.log(`  Error: ${test.error ? test.error.substring(0, 100) : "N/A"}`);
+        if (test.attempts && test.attempts.length > 0) {
+          test.attempts.forEach((attempt: any, attemptIdx: number) => {
+            if (attempt.error) {
+              console.log(`  Attempt ${attemptIdx + 1} error: ${attempt.error.substring(0, 100)}`);
+            }
+          });
+        }
+      });
+    }
+
     // Performance metrics
     console.log("\n=== Performance Info ===");
     console.log(`File size: ${(zipBuffer.length / 1024 / 1024).toFixed(2)} MB`);

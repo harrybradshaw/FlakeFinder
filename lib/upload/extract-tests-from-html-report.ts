@@ -26,13 +26,25 @@ export async function extractTestsFromHtmlReport(
   }
 
   const htmlContent = await htmlFile.async("string");
-  const match = htmlContent.match(/window\.playwrightReportBase64 = "([^"]+)"/);
-  if (!match) {
+  
+  // Try old format: window.playwrightReportBase64 = "data:..."
+  let base64Data: string | null = null;
+  const oldMatch = htmlContent.match(/window\.playwrightReportBase64 = "([^"]+)"/);
+  if (oldMatch) {
+    base64Data = oldMatch[1].replace("data:application/zip;base64,", "");
+  } else {
+    // Try new format: <script id="playwrightReportBase64">data:...</script>
+    const newMatch = htmlContent.match(/<script[^>]*id="playwrightReportBase64"[^>]*>([\s\S]*?)<\/script>/);
+    if (newMatch) {
+      const scriptContent = newMatch[1].trim();
+      base64Data = scriptContent.replace("data:application/zip;base64,", "");
+    }
+  }
+  
+  if (!base64Data) {
     throw new Error("No embedded report found in HTML");
   }
 
-  const dataUri = match[1];
-  const base64Data = dataUri.replace("data:application/zip;base64,", "");
   const embeddedBuffer = Buffer.from(base64Data, "base64");
   const embeddedZip = await JSZip.loadAsync(new Uint8Array(embeddedBuffer));
 

@@ -11,6 +11,7 @@ import { Settings, Trash2, Power, PowerOff } from "lucide-react";
 import Link from "next/link";
 import { type Database } from "@/types/supabase";
 import { TestWebhookButton } from "./test-webhook-button";
+import { Route } from "next";
 
 export async function WebhooksList() {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
@@ -73,7 +74,7 @@ export async function WebhooksList() {
 
   return (
     <div className="grid gap-4">
-      {webhooks.map((webhook: any) => (
+      {webhooks.map((webhook) => (
         <Card key={webhook.id} className="overflow-hidden">
           <CardHeader className="pb-5 pt-6">
             <div className="flex items-start justify-between gap-6">
@@ -113,7 +114,7 @@ export async function WebhooksList() {
               </div>
               <div className="flex gap-2 shrink-0">
                 <TestWebhookButton webhookId={webhook.id} />
-                <Link href={`/admin/webhooks/${webhook.id}`}>
+                <Link href={`/admin/webhooks/${webhook.id}` as Route}>
                   <Button variant="outline" size="sm" className="h-9 w-9 p-0">
                     <Settings className="h-4 w-4" />
                   </Button>

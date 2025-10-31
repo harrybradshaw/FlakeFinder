@@ -243,7 +243,6 @@ describe("Shared Upload Handler Integration", () => {
       // Mock tests query for metrics aggregation (flakiness and performance)
       http.get(`${SUPABASE_URL}/rest/v1/tests`, ({ request }) => {
         const url = new URL(request.url);
-        const select = url.searchParams.get("select");
 
         // Return empty array for any metrics queries
         // These queries have complex filters for aggregation
@@ -791,15 +790,21 @@ describe("Shared Upload Handler Integration", () => {
 
     // Check error messages from failed tests
     console.log("\n=== Error Messages ===");
-    const failedTests = result.testRun?.tests?.filter((t: any) => t.status === "failed");
+    const failedTests = result.testRun?.tests?.filter(
+      (t: any) => t.status === "failed",
+    );
     if (failedTests && failedTests.length > 0) {
       failedTests.forEach((test: any, idx: number) => {
         console.log(`Failed Test ${idx + 1}: ${test.name}`);
-        console.log(`  Error: ${test.error ? test.error.substring(0, 100) : "N/A"}`);
+        console.log(
+          `  Error: ${test.error ? test.error.substring(0, 100) : "N/A"}`,
+        );
         if (test.attempts && test.attempts.length > 0) {
           test.attempts.forEach((attempt: any, attemptIdx: number) => {
             if (attempt.error) {
-              console.log(`  Attempt ${attemptIdx + 1} error: ${attempt.error.substring(0, 100)}`);
+              console.log(
+                `  Attempt ${attemptIdx + 1} error: ${attempt.error.substring(0, 100)}`,
+              );
             }
           });
         }

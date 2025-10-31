@@ -70,15 +70,14 @@ export async function GET(
       if (trigData) triggerId = trigData.id;
     }
 
-    // Get test runs with filters (for this project only)
-    const runs = await repos.testRuns.getTestRunsInDateRange(
-      suiteTest.project_id,
+    const testData = await repos.testRuns.getTestHistoryOptimized(
+      suiteTestId,
       startDate,
       environmentId,
       triggerId,
     );
 
-    if (!runs || runs.length === 0) {
+    if (!testData || testData.length === 0) {
       return NextResponse.json({
         id: suiteTest.id,
         name: suiteTest.name,
@@ -94,12 +93,8 @@ export async function GET(
       });
     }
 
-    const runIds = runs.map((r) => r.id);
-
-    const tests = await repos.testRuns.getTestHistory(suiteTestId, runIds);
-
     // Build history with run context
-    const history = (tests || []).map((test: any) => {
+    const history = testData.map((test) => {
       return {
         timestamp: test.started_at,
         status: test.status,
@@ -113,14 +108,14 @@ export async function GET(
     });
 
     // Calculate summary
-    const totalRuns = tests?.length || 0;
-    const passed = tests?.filter((t) => t.status === "passed").length || 0;
-    const failed = tests?.filter((t) => t.status === "failed").length || 0;
-    const flaky = tests?.filter((t) => t.status === "flaky").length || 0;
+    const totalRuns = testData.length;
+    const passed = testData.filter((t) => t.status === "passed").length;
+    const failed = testData.filter((t) => t.status === "failed").length;
+    const flaky = testData.filter((t) => t.status === "flaky").length;
 
     // Calculate average duration per attempt (not total duration)
     const totalDuration =
-      tests?.reduce((sum, t) => {
+      testData.reduce((sum, t) => {
         const attempts = t.attempts || 1;
         return sum + (t.duration || 0) / attempts;
       }, 0) || 0;

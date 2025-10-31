@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import {
-  aggregateTestMetrics,
   transformTestMetrics,
   sortTestsByHealth,
 } from "@/lib/test-aggregation-utils";
@@ -93,39 +92,48 @@ export async function GET(request: NextRequest) {
       if (trigData) triggerId = trigData.id;
     }
 
-    // Get test runs with filters (including project filter)
-    const runs = await repos.testRuns.getTestRunsByProjects(
-      filteredProjectIds,
-      startDate,
-      environmentId,
-      triggerId,
-    );
+    const { data: aggregatedTests, error: aggregationError } =
+      await supabase.rpc("aggregate_test_metrics", {
+        p_project_ids: filteredProjectIds,
+        p_start_date: startDate.toISOString(),
+        p_environment_id: environmentId ?? undefined,
+        p_trigger_id: triggerId ?? undefined,
+      });
 
-    if (runs.length === 0) {
+    if (aggregationError) {
+      console.error("[API] Error aggregating tests:", aggregationError);
+      throw new Error(`Failed to aggregate tests: ${aggregationError.message}`);
+    }
+
+    if (!aggregatedTests || aggregatedTests.length === 0) {
       return NextResponse.json({ tests: [] });
     }
 
-    const runIds = runs.map((r) => r.id);
+    // Transform the aggregated data to match the expected format
+    const testsResponse = aggregatedTests.map((test) => {
+      // Parse the JSONB recent_statuses into the expected format
+      const recentStatuses = Array.isArray(test.recent_statuses)
+        ? test.recent_statuses.map((rs: any) => ({
+            status: rs.status,
+            started_at: rs.started_at,
+          }))
+        : [];
 
-    // Fetch all test executions for these runs with suite_test information
-    const tests = await repos.testRuns.getTestsForAggregation(runIds);
+      const metrics = {
+        suite_test_id: test.suite_test_id,
+        name: test.name,
+        file: test.file,
+        totalRuns: test.total_runs,
+        passed: test.passed,
+        failed: test.failed,
+        flaky: test.flaky,
+        skipped: test.skipped,
+        totalDuration: test.total_duration,
+        recentStatuses,
+      };
 
-    // Aggregate metrics by suite_test_id (canonical test identifier)
-    const testMetrics = aggregateTestMetrics(
-      (tests || []).map((test) => ({
-        suite_test_id: test.suite_test_id!,
-        status: test.status,
-        duration: test.duration,
-        test_run_id: test.test_run_id,
-        started_at: test.started_at!,
-        suite_test: test.suite_test,
-      })),
-    );
-
-    // Transform to response format
-    const testsResponse = Array.from(testMetrics.values()).map(
-      transformTestMetrics,
-    );
+      return transformTestMetrics(metrics);
+    });
 
     // Sort by health (worst first)
     const sortedTests = sortTestsByHealth(testsResponse);

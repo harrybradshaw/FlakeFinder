@@ -40,7 +40,7 @@ describe("Slack Formatter - URL Conversion", () => {
       const actionsBlock = result.blocks.find((b: any) => b.type === "actions");
 
       expect(actionsBlock.elements[0].url).toBe(
-        "https://test-viewer.example.com/runs/test-run-123"
+        "https://test-viewer.example.com/runs/test-run-123",
       );
     });
 
@@ -62,7 +62,7 @@ describe("Slack Formatter - URL Conversion", () => {
       const actionsBlock = result.blocks.find((b: any) => b.type === "actions");
 
       expect(actionsBlock.elements[0].url).toBe(
-        "https://custom-domain.com/runs/test-run-123"
+        "https://custom-domain.com/runs/test-run-123",
       );
     });
 
@@ -86,7 +86,7 @@ describe("Slack Formatter - URL Conversion", () => {
       const actionsBlock = result.blocks.find((b: any) => b.type === "actions");
 
       expect(actionsBlock.elements[0].url).toBe(
-        "http://localhost:3000/runs/test-run-123"
+        "http://localhost:3000/runs/test-run-123",
       );
     });
   });
@@ -109,10 +109,10 @@ describe("Slack Formatter - URL Conversion", () => {
       const actionsBlock = result.blocks.find((b: any) => b.type === "actions");
 
       expect(actionsBlock.elements[0].url).toBe(
-        "https://test-viewer.example.com/tests/test-123"
+        "https://test-viewer.example.com/tests/test-123",
       );
       expect(actionsBlock.elements[1].url).toBe(
-        "https://test-viewer.example.com/runs/test-run-123"
+        "https://test-viewer.example.com/runs/test-run-123",
       );
     });
   });
@@ -136,7 +136,7 @@ describe("Slack Formatter - URL Conversion", () => {
       const actionsBlock = result.blocks.find((b: any) => b.type === "actions");
 
       expect(actionsBlock.elements[0].url).toBe(
-        "https://test-viewer.example.com/tests/test-123"
+        "https://test-viewer.example.com/tests/test-123",
       );
     });
   });
@@ -159,10 +159,10 @@ describe("Slack Formatter - URL Conversion", () => {
       const actionsBlock = result.blocks.find((b: any) => b.type === "actions");
 
       expect(actionsBlock.elements[0].url).toBe(
-        "https://test-viewer.example.com/tests/test-123"
+        "https://test-viewer.example.com/tests/test-123",
       );
       expect(actionsBlock.elements[1].url).toBe(
-        "https://test-viewer.example.com/runs/test-run-123"
+        "https://test-viewer.example.com/runs/test-run-123",
       );
     });
   });

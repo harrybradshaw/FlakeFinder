@@ -199,20 +199,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ patterns: [] });
     }
 
-    const runs = await repos.testRuns.getTestRunsForFailureAnalysis(
-      accessibleProjectIds,
-      startDate,
-      projectId,
-      environmentId,
-      triggerId,
-    );
-
-    if (!runs || runs.length === 0) {
-      return NextResponse.json({ patterns: [] });
-    }
-
-    const runIds = runs.map((r) => r.id);
-
     let suiteTestIdList: string[] | null = null;
     if (suiteId) {
       suiteTestIdList = await repos.testRuns.getSuiteTestIdsBySuite(suiteId);
@@ -222,34 +208,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const tests = await repos.testRuns.getTestsForFailureAnalysis(
-      runIds,
+    // Use the optimized repository method to get failed tests
+    const failedTests = await repos.testRuns.getFailedTestsForPatternAnalysis(
+      accessibleProjectIds,
+      startDate,
+      projectId,
+      environmentId,
+      triggerId,
       testId,
       suiteTestIdList,
     );
 
-    if (!tests || tests.length === 0) {
-      return NextResponse.json({ patterns: [] });
-    }
-
-    const testIds = tests.map((t) => t.id);
-    const testResults = await repos.testRuns.getFailedTestResults(testIds);
-
-    if (!testResults || testResults.length === 0) {
+    if (!failedTests || failedTests.length === 0) {
       return NextResponse.json({ patterns: [] });
     }
 
     const stepAnalysis = new Map<string, StepAnalysis>();
 
-    for (const result of testResults) {
-      const test = tests.find((t) => t.id === result.test_id);
-      if (!test) continue;
-
+    for (const test of failedTests) {
       const suiteTest = test.suite_tests as
         | { name: string; file: string }
         | undefined;
 
-      const screenshots = result.screenshots as string[] | null;
+      const screenshots = test.screenshots as string[] | null;
       const screenshot =
         screenshots && screenshots.length > 0 ? screenshots[0] : undefined;
 
@@ -258,17 +239,13 @@ export async function GET(request: NextRequest) {
         testName: suiteTest?.name || "Unknown",
         testFile: suiteTest?.file || "Unknown",
         testRunId: test.test_run_id,
-        timestamp: runs.find((r) => r.id === test.test_run_id)?.timestamp || "",
+        timestamp: test.test_runs?.timestamp || "",
         screenshot,
       };
 
-      if (result.status === "failed" && result.last_failed_step) {
-        const failedStep = result.last_failed_step as {
-          title?: string;
-          error?: string;
-        };
-        const stepTitle = failedStep.title || "Unknown Step";
-        const errorMsg = normalizeError(failedStep.error || result.error || "");
+      if (test.status === "failed") {
+        const stepTitle = "Test Failure";
+        const errorMsg = normalizeError(test.error || "");
 
         if (!stepAnalysis.has(stepTitle)) {
           stepAnalysis.set(stepTitle, {
@@ -332,8 +309,8 @@ export async function GET(request: NextRequest) {
       summary: {
         totalPatterns: patterns.length,
         timeRange,
-        analyzedRuns: runs.length,
-        analyzedTests: tests.length,
+        analyzedRuns: failedTests.length,
+        analyzedTests: failedTests.length,
       },
     });
   } catch (error) {

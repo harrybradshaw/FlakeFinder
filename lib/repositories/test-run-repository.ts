@@ -485,35 +485,134 @@ export class TestRunRepository extends BaseRepository {
   }
 
   /**
-   * Get tests for aggregation (with suite_test info)
+   * Get test history for a suite test with full context (optimized version)
    */
-  async getTestsForAggregation(runIds: string[]) {
-    if (runIds.length === 0) return [];
-
-    const { data, error } = await this.supabase
+  async getTestHistoryOptimized(
+    suiteTestId: string,
+    startDate: Date,
+    environmentId?: string | null,
+    triggerId?: string | null,
+  ) {
+    let query = this.supabase
       .from("tests")
       .select(
         `
-        suite_test_id,
         status,
         duration,
-        test_run_id,
+        attempts,
         started_at,
-        suite_test:suite_tests(id, name, file)
+        test_run_id,
+        test_runs!inner(
+          id,
+          timestamp,
+          branch,
+          environments(name),
+          test_triggers(name)
+        )
       `,
       )
-      .in("test_run_id", runIds)
-      .order("started_at", { ascending: false });
+      .eq("suite_test_id", suiteTestId);
+
+    // Apply date filter via test_runs timestamp
+    query = query.gte("test_runs.timestamp", startDate.toISOString());
+
+    // Order by test run start time (most recent first)
+    query = query.order("timestamp", {
+      ascending: false,
+      foreignTable: "test_runs",
+    });
+
+    // Apply environment filter if provided
+    if (environmentId) {
+      query = query.eq("test_runs.environment_id", environmentId);
+    }
+
+    // Apply trigger filter if provided
+    if (triggerId) {
+      query = query.eq("test_runs.trigger_id", triggerId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
-      throw new Error(`Failed to fetch tests: ${error.message}`);
+      throw new Error(`Failed to fetch test history: ${error.message}`);
     }
     return data || [];
   }
 
   /**
-   * Get test run stats with filters
+   * Get failed tests for failure pattern analysis (optimized version)
    */
+  async getFailedTestsForPatternAnalysis(
+    accessibleProjectIds: string[],
+    startDate: Date,
+    projectId?: string | null,
+    environmentId?: string | null,
+    triggerId?: string | null,
+    testId?: string | null,
+    suiteTestIds?: string[] | null,
+  ) {
+    let query = this.supabase
+      .from("tests")
+      .select(
+        `
+        id,
+        test_run_id,
+        status,
+        error,
+        screenshots,
+        suite_tests!inner(
+          id,
+          name,
+          file
+        ),
+        test_runs!inner(
+          id,
+          timestamp,
+          branch,
+          project_id,
+          environments(name),
+          test_triggers(name)
+        )
+      `,
+      )
+      .eq("status", "failed")
+      .gte("test_runs.timestamp", startDate.toISOString());
+
+    // Apply project filter
+    if (projectId) {
+      query = query.eq("test_runs.project_id", projectId);
+    } else {
+      // Filter by accessible projects
+      query = query.in("test_runs.project_id", accessibleProjectIds);
+    }
+
+    // Apply other filters
+    if (environmentId) {
+      query = query.eq("test_runs.environment_id", environmentId);
+    }
+    if (triggerId) {
+      query = query.eq("test_runs.trigger_id", triggerId);
+    }
+    if (testId) {
+      query = query.eq("suite_tests.id", testId);
+    }
+    if (suiteTestIds) {
+      query = query.in("suite_tests.id", suiteTestIds);
+    }
+
+    // Order by most recent and limit to avoid huge result sets
+    query = query
+      .order("timestamp", { ascending: false, foreignTable: "test_runs" })
+      .limit(1000);
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Failed to fetch failed tests: ${error.message}`);
+    }
+    return data || [];
+  }
   async getTestRunStats(
     projectIds: string[],
     startDate: Date,

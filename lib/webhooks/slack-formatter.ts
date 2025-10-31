@@ -405,17 +405,17 @@ export function formatRunFailure(event: RunFailureEvent): object {
  */
 function toAbsoluteUrl(url: string): string {
   // If already absolute, return as-is
-  if (url.startsWith('http://') || url.startsWith('https://')) {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
     return url;
   }
-  
+
   // Get base URL from environment variable
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
   // Remove trailing slash from base URL and ensure path starts with slash
-  const cleanBase = baseUrl.replace(/\/$/, '');
-  const cleanPath = url.startsWith('/') ? url : `/${url}`;
-  
+  const cleanBase = baseUrl.replace(/\/$/, "");
+  const cleanPath = url.startsWith("/") ? url : `/${url}`;
+
   return `${cleanBase}${cleanPath}`;
 }
 

@@ -864,7 +864,26 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      aggregate_test_metrics: {
+        Args: {
+          p_environment_id?: string;
+          p_project_ids: string[];
+          p_start_date: string;
+          p_trigger_id?: string;
+        };
+        Returns: {
+          failed: number;
+          file: string;
+          flaky: number;
+          name: string;
+          passed: number;
+          recent_statuses: Json;
+          skipped: number;
+          suite_test_id: string;
+          total_duration: number;
+          total_runs: number;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;

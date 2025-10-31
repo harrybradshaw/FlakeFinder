@@ -42,7 +42,10 @@ export class MetricsRepository extends BaseRepository {
   async saveFlakinessMetrics(metrics: FlakinessMetric[]) {
     const { error } = await this.supabase
       .from("test_flakiness_metrics")
-      .insert(metrics);
+      .upsert(metrics, {
+        onConflict: "suite_test_id,date",
+        ignoreDuplicates: false,
+      });
 
     if (error)
       throw new Error(`Failed to save flakiness metrics: ${error.message}`);
@@ -54,7 +57,10 @@ export class MetricsRepository extends BaseRepository {
   async savePerformanceMetrics(metrics: PerformanceMetric[]) {
     const { error } = await this.supabase
       .from("test_performance_metrics")
-      .insert(metrics);
+      .upsert(metrics, {
+        onConflict: "suite_test_id,date",
+        ignoreDuplicates: false,
+      });
 
     if (error)
       throw new Error(`Failed to save performance metrics: ${error.message}`);

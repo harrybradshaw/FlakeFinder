@@ -26,21 +26,25 @@ export async function extractTestsFromHtmlReport(
   }
 
   const htmlContent = await htmlFile.async("string");
-  
+
   // Try old format: window.playwrightReportBase64 = "data:..."
   let base64Data: string | null = null;
-  const oldMatch = htmlContent.match(/window\.playwrightReportBase64 = "([^"]+)"/);
+  const oldMatch = htmlContent.match(
+    /window\.playwrightReportBase64 = "([^"]+)"/,
+  );
   if (oldMatch) {
     base64Data = oldMatch[1].replace("data:application/zip;base64,", "");
   } else {
     // Try new format: <script id="playwrightReportBase64">data:...</script>
-    const newMatch = htmlContent.match(/<script[^>]*id="playwrightReportBase64"[^>]*>([\s\S]*?)<\/script>/);
+    const newMatch = htmlContent.match(
+      /<script[^>]*id="playwrightReportBase64"[^>]*>([\s\S]*?)<\/script>/,
+    );
     if (newMatch) {
       const scriptContent = newMatch[1].trim();
       base64Data = scriptContent.replace("data:application/zip;base64,", "");
     }
   }
-  
+
   if (!base64Data) {
     throw new Error("No embedded report found in HTML");
   }
@@ -152,10 +156,14 @@ function mapTestResultToTestAttempt(
     const firstError = result.errors[0];
     if (typeof firstError === "string") {
       errorMessage = firstError;
-    } else if (firstError && typeof firstError === "object" && "message" in firstError) {
+    } else if (
+      firstError &&
+      typeof firstError === "object" &&
+      "message" in firstError
+    ) {
       errorMessage = firstError.message;
     }
-    
+
     // Build error stack from all errors
     const errorMessages = result.errors.map((err) => {
       if (typeof err === "string") return err;
@@ -211,7 +219,11 @@ export function mapHtmlFileToTests(
       const firstError = lastResult.errors[0];
       if (typeof firstError === "string") {
         finalError = firstError;
-      } else if (firstError && typeof firstError === "object" && "message" in firstError) {
+      } else if (
+        firstError &&
+        typeof firstError === "object" &&
+        "message" in firstError
+      ) {
         finalError = firstError.message;
       }
     }

@@ -103,7 +103,10 @@ async function attemptDelivery(
   error?: string;
 }> {
   try {
-    console.log(`[Webhook] Delivering to ${config.webhook_url}`);
+    console.log(`[Webhook] Delivering to ${config.webhook_url} (type: ${config.webhook_type})`);
+
+    const body = JSON.stringify(payload);
+    console.log(`[Webhook] Payload size: ${body.length} bytes`);
 
     const response = await fetch(config.webhook_url, {
       method: "POST",
@@ -117,7 +120,7 @@ async function attemptDelivery(
           ),
         }),
       },
-      body: JSON.stringify(payload),
+      body,
       signal: AbortSignal.timeout(10000), // 10 second timeout
     });
 
@@ -132,8 +135,44 @@ async function attemptDelivery(
       };
     } else {
       console.error(
-        `[Webhook] Delivery ${deliveryId} failed: ${response.status}`,
+        `[Webhook] Delivery ${deliveryId} failed: ${response.status} ${responseBody}`,
       );
+
+      // Log full payload on Slack block errors to aid debugging
+      if (responseBody.includes("invalid_blocks") || responseBody.includes("invalid_payload")) {
+        const payloadObj = payload as any;
+        if (payloadObj.blocks) {
+          console.error(
+            `[Webhook] Slack blocks that failed validation (delivery ${deliveryId}):`,
+            JSON.stringify(payloadObj.blocks, null, 2),
+          );
+          // Log each block type and text length for quick diagnosis
+          payloadObj.blocks.forEach((block: any, i: number) => {
+            const textLen = JSON.stringify(block).length;
+            console.error(
+              `[Webhook]   Block[${i}]: type=${block.type}, serialized_length=${textLen}`,
+            );
+            if (block.type === "section" && block.fields) {
+              console.error(
+                `[Webhook]     fields count=${block.fields.length} (max 10)`,
+              );
+            }
+            if (block.type === "actions" && block.elements) {
+              block.elements.forEach((el: any, j: number) => {
+                console.error(
+                  `[Webhook]     action[${j}]: type=${el.type}, url=${el.url ?? "(none)"}`,
+                );
+              });
+            }
+          });
+        } else {
+          console.error(
+            `[Webhook] Full payload that failed (delivery ${deliveryId}):`,
+            JSON.stringify(payload, null, 2),
+          );
+        }
+      }
+
       return {
         success: false,
         statusCode: response.status,

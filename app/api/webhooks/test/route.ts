@@ -141,6 +141,19 @@ export async function POST(request: NextRequest) {
 
     const responseText = await response.text();
 
+    // Log details on failure to help debug Slack invalid_blocks errors
+    if (!response.ok) {
+      console.error(
+        `[WebhookTest] Test delivery failed: ${response.status} ${responseText}`,
+      );
+      if (responseText.includes("invalid_blocks") || responseText.includes("invalid_payload")) {
+        console.error(
+          `[WebhookTest] Payload sent:`,
+          JSON.stringify(testPayload, null, 2),
+        );
+      }
+    }
+
     // Log the test delivery
     await repos.webhooks.logWebhookDelivery({
       webhook_configuration_id: webhook.id,

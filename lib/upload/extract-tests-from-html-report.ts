@@ -42,6 +42,17 @@ export async function extractTestsFromHtmlReport(
     if (newMatch) {
       const scriptContent = newMatch[1].trim();
       base64Data = scriptContent.replace("data:application/zip;base64,", "");
+    } else {
+      // Try newest format (Playwright 1.49+): <template id="playwrightReportBase64">data:...</template>
+      // Playwright switched from <script> to <template> so the browser reads it via .content.textContent
+      const templateMatch = htmlContent.match(
+        /<template[^>]*id="playwrightReportBase64"[^>]*>([\s\S]*?)<\/template>/,
+      );
+      if (templateMatch) {
+        base64Data = templateMatch[1]
+          .trim()
+          .replace("data:application/zip;base64,", "");
+      }
     }
   }
 

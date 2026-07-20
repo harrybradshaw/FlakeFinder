@@ -37,6 +37,7 @@ Handles metrics and alerts data:
 
 - Flakiness metrics (aggregation, retrieval)
 - Performance metrics (aggregation, baseline queries)
+- Per-file timing aggregates for CI shard balancing
 - Alerts (flakiness, performance, with test details)
 
 ### TestRunRepository

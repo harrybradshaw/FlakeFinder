@@ -212,4 +212,25 @@ export class MetricsRepository extends BaseRepository {
       );
     return data || [];
   }
+
+  /**
+   * Get expected per-file test durations for a suite, for balanced sharding
+   */
+  async getFileTimings(
+    suiteId: string,
+    startDate: Date,
+    environmentId?: string,
+    triggerId?: string,
+  ) {
+    const { data, error } = await this.supabase.rpc("get_file_timings", {
+      p_suite_id: suiteId,
+      p_start_date: startDate.toISOString(),
+      p_environment_id: environmentId,
+      p_trigger_id: triggerId,
+    });
+
+    if (error)
+      throw new Error(`Failed to fetch file timings: ${error.message}`);
+    return data || [];
+  }
 }

@@ -884,6 +884,19 @@ export type Database = {
           total_runs: number;
         }[];
       };
+      get_file_timings: {
+        Args: {
+          p_environment_id?: string;
+          p_start_date: string;
+          p_suite_id: string;
+          p_trigger_id?: string;
+        };
+        Returns: {
+          expected_duration_ms: number;
+          file: string;
+          sample_size: number;
+        }[];
+      };
     };
     Enums: {
       [_ in never]: never;
